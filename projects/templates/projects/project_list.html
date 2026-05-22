@@ -132,7 +132,7 @@
              data-description="{{ project.description|lower }}" 
              data-tags="{% for tag in project.tags.all %}{{ tag.name|lower }} {% endfor %}"
              data-files="{% for image in project.images.all %}{{ image.image.name|lower }} {% endfor %}">
-            <div class="card h-100 premium-card">
+            <div class="card h-100 premium-card hover-effect">
                 <a href="{% url 'projects:project_detail' project.pk %}" class="card-link d-flex flex-column h-100">
                     <div class="project-image-container border-bottom border-dark">
                         {% if project.images.first %}

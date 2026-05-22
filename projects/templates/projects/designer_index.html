@@ -107,7 +107,7 @@
              style="animation-delay: {{ forloop.counter|add:'1' }}00ms;"
              data-name="{{ data.designer.name|lower }}" 
              data-projects="{% for project in data.projects %}{{ project.name|lower }} {% endfor %}">
-            <div class="card h-100 premium-card">
+            <div class="card h-100 premium-card hover-effect">
                 <div class="designer-logo-container border-bottom border-dark">
                     {% if data.designer.logo %}
                     <img src="{{ data.designer.logo_thumbnail.url }}" alt="{{ data.designer.name }} logo">

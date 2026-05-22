@@ -2259,21 +2259,23 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Initialize instructions gallery
-    new Splide('#instructionsGallery', {
-        type: 'slide',
-        rewind: false,
-        perPage: 1,
-        focus: 'center',
-        autoWidth: true,
-        gap: '1rem',
-        pagination: true,
-        arrows: true,
-        breakpoints: {
-            768: {
-                perPage: 1,
+    if ($('#instructionsGallery').length) {
+        new Splide('#instructionsGallery', {
+            type: 'slide',
+            rewind: false,
+            perPage: 1,
+            focus: 'center',
+            autoWidth: true,
+            gap: '1rem',
+            pagination: true,
+            arrows: true,
+            breakpoints: {
+                768: {
+                    perPage: 1,
+                }
             }
-        }
-    }).mount();
+        }).mount();
+    }
 
     // Initialize GLightbox for instructions
     const lightbox = GLightbox({

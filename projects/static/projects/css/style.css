@@ -228,13 +228,13 @@
     border-top-right-radius: 16px;
 }
 
-.premium-card:hover {
+.premium-card.hover-effect:hover {
     transform: translateY(-5px);
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
     border-color: rgba(255, 255, 255, 0.1);
 }
 
-.premium-card:hover::before {
+.premium-card.hover-effect:hover::before {
     opacity: 1;
 }
 

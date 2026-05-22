@@ -81,7 +81,7 @@
     <div class="row g-4 mt-1" id="modulesGrid">
         {% for module in modules %}
         <div class="col-md-6 col-lg-4 col-xl-3 animate-enter" style="animation-delay: {{ forloop.counter }}00ms;">
-            <div class="card h-100 premium-card">
+            <div class="card h-100 premium-card hover-effect">
                 <button class="btn btn-danger position-absolute top-0 end-0 m-3 uninstall-btn" 
                         title="Uninstall Module" 
                         onclick="confirmUninstall('{{ module.id }}', '{{ module.name|escapejs }}')"
