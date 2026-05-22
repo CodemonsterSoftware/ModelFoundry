@@ -585,48 +585,6 @@ def add_multiple_parts(request, project_id):
                     part.stl_file.save(file.name, file, save=True)
                     pipeline_tasks.append((part.id, part.stl_file.path))
                     
-                    # 3MF Explosion Logic
-                    if file.name.lower().endswith('.3mf'):
-                        try:
-                            import trimesh
-                            import tempfile
-                            from django.core.files import File
-                            
-                            scene = trimesh.load(part.stl_file.path, force='scene')
-                            
-                            if isinstance(scene, trimesh.Scene) and hasattr(scene, 'graph'):
-                                count = 1
-                                for node_name in scene.graph.nodes_geometry:
-                                    geometry_id = scene.graph[node_name][1]
-                                    mesh = scene.geometry[geometry_id]
-                                    
-                                    child_filename = f"{part.name}_{count}.obj"
-                                    
-                                    with tempfile.NamedTemporaryFile(suffix='.obj', delete=False) as temp_obj:
-                                        mesh.export(temp_obj.name)
-                                        
-                                        with open(temp_obj.name, 'rb') as f:
-                                            child_part = Part.objects.create(
-                                                project=project,
-                                                name=f"{part.name} - Part {count}",
-                                                quantity=part.quantity,
-                                                material_id=part.material_id,
-                                                color=part.color,
-                                                group=part.group,
-                                                parent=part
-                                            )
-                                            # Skip both for children too
-                                            child_part._skip_volume = True
-                                            child_part._skip_thumbnail = True
-                                            child_part.stl_file.save(child_filename, File(f), save=True)
-                                            pipeline_tasks.append((child_part.id, child_part.stl_file.path))
-                                            processed_files += 1
-                                            
-                                    os.unlink(temp_obj.name)
-                                    count += 1
-                        except Exception as e:
-                            logger.error(f"Error extracting 3MF parts for {part.name}: {e}")
-                            
                     file_process_time = time.time() - file_start_time
                     processed_files += 1
                     
@@ -2457,10 +2415,18 @@ def insights(request):
             .order_by('month')
             
         # Burn Rate By Material Type
-        burn_data = PrintHistory.objects.filter(status='completed', timestamp__gte=six_months_ago_month, part__filament_weight_g__isnull=False, part__material__isnull=False) \
+        # Calculate burn rate using physical volume and material density
+        burn_data = PrintHistory.objects.filter(status='completed', timestamp__gte=six_months_ago_month, part__volume__isnull=False, part__material__isnull=False) \
             .annotate(month=TruncMonth('timestamp')) \
             .values('month', 'part__material__type') \
-            .annotate(total_weight=Sum('part__filament_weight_g')) \
+            .annotate(
+                total_weight=Sum(
+                    ExpressionWrapper(
+                        F('part__volume') * F('part__material__density') / 1000.0,
+                        output_field=DecimalField()
+                    )
+                )
+            ) \
             .order_by('month')
 
         growth_dict = {item['month']: item['count'] for item in growth_data if item['month']}
@@ -2592,6 +2558,14 @@ def insights(request):
                 current += timedelta(days=1)
             heatmap_grid.append(week)
 
+        # Format Filament Used
+        if total_filament_used_g >= 1000:
+            total_filament_used_str = f"{float(total_filament_used_g) / 1000:.2f} kg"
+        else:
+            total_filament_used_str = f"{float(total_filament_used_g):.0f} g"
+            
+        spools_used = float(total_filament_used_g) / 1000.0
+
         import json
         return {
             'total_projects': total_projects,
@@ -2615,6 +2589,8 @@ def insights(request):
             'top_tag': top_tag,
             'tag_coverage': float(tag_coverage),
             'total_filament_used_g': float(total_filament_used_g),
+            'total_filament_used_str': total_filament_used_str,
+            'spools_used': float(spools_used),
             'type_labels': json.dumps(type_labels),
             'type_data': json.dumps(type_data),
             'most_used_type': most_used_type,

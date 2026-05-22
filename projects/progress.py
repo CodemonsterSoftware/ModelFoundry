@@ -34,7 +34,7 @@ def create_task(task_id, total_parts):
         }
 
 
-def update_task(task_id, phase=None, completed=None, status=None):
+def update_task(task_id, phase=None, completed=None, status=None, total=None):
     """Update progress for a task."""
     with _lock:
         task = _tasks.get(task_id)
@@ -46,6 +46,8 @@ def update_task(task_id, phase=None, completed=None, status=None):
             task['completed'] = completed
         if status is not None:
             task['status'] = status
+        if total is not None:
+            task['total'] = total
 
 
 def skip_phase(task_id, phase, reason=''):

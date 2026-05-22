@@ -165,13 +165,13 @@ class Material(models.Model):
         total_volume = Decimal('0')
         
         # Get all completed parts that use this material
-        completed_parts = Part.objects.filter(material=self, completed=True)
+        completed_parts = Part.objects.filter(material=self, completed__gt=0)
         
         for part in completed_parts:
             if part.volume:
                 # Convert volume from mm³ to cm³ (divide by 1000)
                 volume_cm3 = Decimal(str(part.volume)) / Decimal('1000')
-                total_volume += volume_cm3 * part.quantity
+                total_volume += volume_cm3 * part.completed
         
         # Convert volume to grams using density
         if self.density and total_volume:

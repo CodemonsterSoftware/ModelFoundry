@@ -81,13 +81,15 @@ def process_parts_background(task_id, part_ids_and_paths, max_workers=None):
             from projects import progress
             from django.db import connection
 
-            total = len(part_ids_and_paths)
+            # ── Phase 1.5: 3MF Explosion ─────────────────────────────
+            expanded_parts = _run_3mf_explosion_phase(task_id, part_ids_and_paths)
+            total = len(expanded_parts)
 
             # ── Phase 2: Thumbnails ──────────────────────────────────
-            _run_thumbnail_phase(task_id, part_ids_and_paths, total)
+            _run_thumbnail_phase(task_id, expanded_parts, total)
 
             # ── Phase 3: Volumes ─────────────────────────────────────
-            _run_volume_phase(task_id, part_ids_and_paths, total, max_workers)
+            _run_volume_phase(task_id, expanded_parts, total, max_workers)
 
             # ── Done ─────────────────────────────────────────────────
             progress.complete_task(task_id)
@@ -104,6 +106,70 @@ def process_parts_background(task_id, part_ids_and_paths, max_workers=None):
     thread.start()
     logger.info(f"[pipeline] Task {task_id}: dispatched {len(part_ids_and_paths)} parts to background")
 
+
+def _run_3mf_explosion_phase(task_id, part_ids_and_paths):
+    """Phase 1.5: Explode 3MF files into individual OBJ parts."""
+    from projects.models import Part
+    from projects import progress
+    import tempfile
+    import os
+
+    expanded_parts = []
+    
+    for i, (part_id, file_path) in enumerate(part_ids_and_paths):
+        # We always keep the original part in the list (even if it's 3MF, as it serves as the parent)
+        expanded_parts.append((part_id, file_path))
+        
+        if not file_path or not file_path.lower().endswith('.3mf'):
+            continue
+            
+        progress.update_task(task_id, status=f'Extracting parts from 3MF...')
+        
+        try:
+            import trimesh
+            from django.core.files import File
+            
+            part = Part.objects.get(id=part_id)
+            scene = trimesh.load(file_path, force='scene')
+            
+            if isinstance(scene, trimesh.Scene) and hasattr(scene, 'graph'):
+                count = 1
+                for node_name in scene.graph.nodes_geometry:
+                    geometry_id = scene.graph[node_name][1]
+                    mesh = scene.geometry[geometry_id]
+                    
+                    child_filename = f"{part.name}_{count}.obj"
+                    
+                    with tempfile.NamedTemporaryFile(suffix='.obj', delete=False) as temp_obj:
+                        mesh.export(temp_obj.name)
+                        
+                        with open(temp_obj.name, 'rb') as f:
+                            child_part = Part.objects.create(
+                                project=part.project,
+                                name=f"{part.name} - Part {count}",
+                                quantity=part.quantity,
+                                material=part.material,
+                                color=part.color,
+                                group=part.group,
+                                parent=part
+                            )
+                            # Skip synchronous processing for children
+                            child_part._skip_volume = True
+                            child_part._skip_thumbnail = True
+                            child_part.stl_file.save(child_filename, File(f), save=True)
+                            
+                            expanded_parts.append((child_part.id, child_part.stl_file.path))
+                            
+                    os.unlink(temp_obj.name)
+                    count += 1
+                    progress.update_task(task_id, status=f'Extracting parts from 3MF... ({count-1} extracted)')
+                    
+        except Exception as e:
+            logger.error(f"[pipeline] 3MF explosion failed for part {part_id}: {e}")
+            
+    # Update total count in progress tracker to reflect new parts
+    progress.update_task(task_id, total=len(expanded_parts))
+    return expanded_parts
 
 def _run_thumbnail_phase(task_id, part_ids_and_paths, total):
     """Phase 2: Generate thumbnails via Blender sidecar."""

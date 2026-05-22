@@ -44,4 +44,4 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 # Command to run the application using Gunicorn for production concurrency
 # We use 1 worker with 3 threads so that the in-memory Forge Module Registry singleton is shared across all concurrent requests
-CMD ["gunicorn", "modelfoundry.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "3"] 
+CMD ["gunicorn", "modelfoundry.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "3", "--timeout", "300"] 

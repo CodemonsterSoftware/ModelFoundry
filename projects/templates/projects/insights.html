@@ -5,38 +5,9 @@
 
 {% block extra_css %}
 <style>
-    /* Flatten premium cards specifically for the insights dashboard */
+    /* Insights specific padding for cards that lack a card-body */
     .premium-card {
-        border-radius: 12px !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
         padding: 1.5rem !important;
-        box-shadow: none !important;
-    }
-    .premium-card:hover {
-        transform: none !important;
-        box-shadow: none !important;
-        border-color: rgba(255, 255, 255, 0.15) !important;
-    }
-    .premium-card::before {
-        display: none !important;
-    }
-
-    .stat-badge {
-        font-size: 1.25rem;
-        font-weight: 700;
-        color: var(--primary-color);
-        background: var(--bg-grey);
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
-        border: 1px solid var(--border-dark);
-    }
-    
-    .stat-label {
-        font-size: 0.875rem;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-top: 0.5rem;
     }
 
     .chart-container {
@@ -146,35 +117,36 @@
                     <!-- Top Stats Mini Grid -->
                     <div class="row g-3 mb-3">
                         <div class="col-md-3 col-6">
-                            <div class="premium-card text-center py-3 h-100 d-flex flex-column justify-content-center">
-                                <div class="text-muted small text-uppercase fw-bold mb-2">
-                                    <i class="fas fa-cube me-1"></i> Projects
+                            <div class="premium-card h-100 d-flex flex-column justify-content-center align-items-center">
+                                <div class="text-muted small text-uppercase fw-bold mb-3 d-flex align-items-center gap-2">
+                                    <i class="fas fa-cube text-primary"></i> Projects
                                 </div>
-                                <div class="stat-badge fs-4">{{ total_projects }}</div>
+                                <h2 class="fw-bold text-light mb-0">{{ total_projects }}</h2>
                             </div>
                         </div>
                         <div class="col-md-3 col-6">
-                            <div class="premium-card text-center py-3 h-100 d-flex flex-column justify-content-center">
-                                <div class="text-muted small text-uppercase fw-bold mb-2">
-                                    <i class="fas fa-shapes me-1"></i> Parts
+                            <div class="premium-card h-100 d-flex flex-column justify-content-center align-items-center">
+                                <div class="text-muted small text-uppercase fw-bold mb-3 d-flex align-items-center gap-2">
+                                    <i class="fas fa-shapes text-info"></i> Parts
                                 </div>
-                                <div class="stat-badge fs-4">{{ total_parts }}</div>
+                                <h2 class="fw-bold text-light mb-0">{{ total_parts }}</h2>
                             </div>
                         </div>
                         <div class="col-md-3 col-6">
-                            <div class="premium-card text-center py-3 h-100 d-flex flex-column justify-content-center">
-                                <div class="text-muted small text-uppercase fw-bold mb-2">
-                                    <i class="fas fa-layer-group me-1"></i> Materials
+                            <div class="premium-card h-100 d-flex flex-column justify-content-center align-items-center position-relative">
+                                <div class="text-muted small text-uppercase fw-bold mb-3 d-flex align-items-center gap-2">
+                                    <i class="fas fa-layer-group text-success"></i> Filament Used
                                 </div>
-                                <div class="stat-badge fs-4">{{ total_materials }}</div>
+                                <h2 class="fw-bold text-light mb-0">{{ total_filament_used_str }}</h2>
+                                <div class="small text-muted mt-2 fw-medium" style="font-size: 0.75rem;">~ {{ spools_used|floatformat:1 }} Spools</div>
                             </div>
                         </div>
                         <div class="col-md-3 col-6">
-                            <div class="premium-card text-center py-3 h-100 d-flex flex-column justify-content-center">
-                                <div class="text-muted small text-uppercase fw-bold mb-2">
-                                    <i class="fas fa-print me-1"></i> Printers
+                            <div class="premium-card h-100 d-flex flex-column justify-content-center align-items-center">
+                                <div class="text-muted small text-uppercase fw-bold mb-3 d-flex align-items-center gap-2">
+                                    <i class="fas fa-print text-warning"></i> Printers
                                 </div>
-                                <div class="stat-badge fs-4">{{ total_machines }}</div>
+                                <h2 class="fw-bold text-light mb-0">{{ total_machines }}</h2>
                             </div>
                         </div>
                     </div>
@@ -479,7 +451,6 @@
                                 <div class="p-3 border rounded h-100" style="border-color: rgba(255,255,255,0.08) !important;">
                                     <div class="text-muted small text-uppercase mb-1">Printed Parts Value</div>
                                     <h4 class="fw-bold text-primary mb-0">${{ total_printed_cost|floatformat:2 }}</h4>
-                                    <div class="small text-muted">{{ total_filament_used_g|floatformat:0 }}g used</div>
                                 </div>
                             </div>
                             <div class="col-md-4 col-6">
