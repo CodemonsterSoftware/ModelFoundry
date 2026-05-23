@@ -4,6 +4,7 @@ import ssl
 import paho.mqtt.client as mqtt
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from django.db import close_old_connections
 from projects.models import Machine, Part, UserSettings
 import re
 import logging
@@ -50,7 +51,8 @@ class Command(BaseCommand):
                         clients[cid].disconnect()
                         del clients[cid]
                         
-                # Sleep before checking again
+                # Close old DB connections before sleeping
+                close_old_connections()
                 time.sleep(10)
                 
         except KeyboardInterrupt:
@@ -132,6 +134,8 @@ class Command(BaseCommand):
             client.subscribe(topic)
         else:
             logger.error(f"[Machine {client.machine_id}] Connection failed with code {rc}")
+            
+        close_old_connections()
 
     def on_disconnect(self, client, userdata, rc):
         logger.warning(f"[Machine {client.machine_id}] Disconnected with code {rc}")
@@ -175,6 +179,8 @@ class Command(BaseCommand):
             pass
         except Exception as e:
             logger.error(f"[Machine {client.machine_id}] Error processing message: {e}")
+        finally:
+            close_old_connections()
             
     def process_print_status(self, machine_id, subtask_name, state):
         # Check if auto_complete is globally enabled by ANY user (in a multi-tenant setup we would check the machine's user)

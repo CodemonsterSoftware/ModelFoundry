@@ -16,7 +16,7 @@ services:
       - SECRET_KEY=your-secret-key-here
       - DATABASE_URL=postgres://postgres:postgres@db:5432/modelfoundry
       - DOCKER_CONTAINER=true
-      - "DEMO_BANNER_TEXT=Demo Credentials - User: admin / Pass: test"
+      # - "DEMO_BANNER_TEXT=Demo Credentials - User: admin / Pass: test"
     depends_on:
       db:
         condition: service_healthy

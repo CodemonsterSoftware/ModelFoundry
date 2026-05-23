@@ -2206,6 +2206,28 @@ def dismiss_slice(request, slice_id):
     return redirect('projects:slicer_inbox')
 
 @login_required
+@require_POST
+def slicer_inbox_clear_all(request):
+    global_users = []
+    for us in UserSettings.objects.filter(settings_type='api'):
+        try:
+            if json.loads(us.settings_data).get('is_global'):
+                global_users.append(us.user)
+        except (TypeError, json.JSONDecodeError):
+            continue
+
+    slices_to_clear = UnclaimedSlice.objects.filter(
+        Q(user=request.user) | Q(user__in=global_users),
+        status='pending'
+    )
+    
+    count = slices_to_clear.count()
+    slices_to_clear.update(status='dismissed')
+    
+    messages.success(request, f'Cleared {count} items from the inbox.')
+    return redirect('projects:slicer_inbox')
+
+@login_required
 def insights(request):
     from django.core.cache import cache
     

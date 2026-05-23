@@ -50,6 +50,7 @@ urlpatterns = [
     path('api/machines/test_mqtt/', views.test_mqtt_connection, name='test_mqtt_connection'),
     path('api/slicer/inbox_count/', views.api_slicer_inbox_count, name='api_slicer_inbox_count'),
     path('slicer/inbox/', views.slicer_inbox, name='slicer_inbox'),
+    path('slicer/inbox/clear-all/', views.slicer_inbox_clear_all, name='slicer_inbox_clear_all'),
     path('slicer/inbox/<int:slice_id>/assign/', views.assign_slice, name='assign_slice'),
     path('slicer/inbox/<int:slice_id>/dismiss/', views.dismiss_slice, name='dismiss_slice'),
     path('part/<int:part_id>/download/', login_required(views.download_stl), name='download_stl'),

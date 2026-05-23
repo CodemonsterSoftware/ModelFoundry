@@ -11,3 +11,5 @@
 - Add version check in app settings to alert user to new versions and changes
 - [x] Update Readme with new screenshots and features as well as forge module links
 - Update forge module styling to match web app styling
+
+-Add clear all button to slicer inbox

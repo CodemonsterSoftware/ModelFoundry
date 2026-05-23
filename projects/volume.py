@@ -76,10 +76,10 @@ def process_parts_background(task_id, part_ids_and_paths, max_workers=None):
         max_workers = min(4, os.cpu_count() or 2)
 
     def _pipeline():
+        from django.db import connection
         try:
             from projects.models import Part
             from projects import progress
-            from django.db import connection
 
             # ── Phase 1.5: 3MF Explosion ─────────────────────────────
             expanded_parts = _run_3mf_explosion_phase(task_id, part_ids_and_paths)
@@ -95,12 +95,12 @@ def process_parts_background(task_id, part_ids_and_paths, max_workers=None):
             progress.complete_task(task_id)
             logger.info(f"[pipeline] Task {task_id}: all phases complete")
 
-            connection.close()
-
         except Exception as e:
             logger.error(f"[pipeline] Task {task_id} error: {e}")
             from projects import progress
             progress.complete_task(task_id)  # Mark done so frontend stops polling
+        finally:
+            connection.close()
 
     thread = threading.Thread(target=_pipeline, daemon=True)
     thread.start()

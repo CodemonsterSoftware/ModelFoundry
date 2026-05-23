@@ -118,6 +118,8 @@ if IS_DOCKER:
             'USER': db_info.username,
             'PASSWORD': db_info.password,
             'HOST': db_info.hostname,
+            'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
         }
     }
     
@@ -188,6 +190,8 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Set maximum upload size to 5GB (5 * 1024 * 1024 * 1024 bytes)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5368709120  # 5GB in bytes
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5368709120  # 5GB in bytes
+DATA_UPLOAD_MAX_NUMBER_FILES = int(os.environ.get('DATA_UPLOAD_MAX_NUMBER_FILES', 200))
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field

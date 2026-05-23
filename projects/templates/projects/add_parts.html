@@ -994,6 +994,11 @@ $(document).ready(function() {
     });
 
     // Handle new group creation
+    $('#newGroupForm').on('submit', function(e) {
+        e.preventDefault();
+        $('#createGroup').click();
+    });
+
     $('#createGroup').click(function() {
         const groupName = $('#groupName').val().trim();
         if (!groupName) {
@@ -1045,6 +1050,11 @@ $(document).ready(function() {
     });
 
     // Handle new material creation
+    $('#newMaterialForm').on('submit', function(e) {
+        e.preventDefault();
+        $('#saveNewMaterial').click();
+    });
+
     $('#saveNewMaterial').click(function() {
         const materialName = $('#materialName').val().trim();
         const materialBrand = $('#materialBrand').val().trim();
