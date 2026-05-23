@@ -263,22 +263,29 @@
                 const name = card.dataset.name || '';
                 const projects = card.dataset.projects || '';
                 
-                // Check if any of the fields contain the search term
-                if (name.includes(searchTerm) || projects.includes(searchTerm)) {
-                    card.style.display = '';
+                const isMatch = name.includes(searchTerm) || projects.includes(searchTerm);
+                
+                if (isMatch) {
                     matchCount++;
+                    if ($(card).is(':hidden')) {
+                        $(card).removeClass('animate-enter').stop(true, false).fadeIn(200);
+                    }
                 } else {
-                    card.style.display = 'none';
+                    if ($(card).is(':visible')) {
+                        $(card).removeClass('animate-enter').stop(true, false).fadeOut(200);
+                    }
                 }
             });
             
             // Show or hide no results message
             if (matchCount === 0 && searchTerm.length > 0) {
-                designersContainer.style.display = 'none';
-                noResults.style.display = 'block';
+                if ($(noResults).is(':hidden')) {
+                    $(noResults).removeClass('animate-enter').stop(true, false).fadeIn(200);
+                }
             } else {
-                designersContainer.style.display = '';
-                noResults.style.display = 'none';
+                if ($(noResults).is(':visible')) {
+                    $(noResults).removeClass('animate-enter').stop(true, false).fadeOut(200);
+                }
             }
         }
         

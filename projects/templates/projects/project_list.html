@@ -5,36 +5,7 @@
 
 {% block extra_css %}
 <style>
-    .project-image-container {
-        position: relative;
-        width: 100%;
-        padding-top: 75%; /* 4:3 Aspect Ratio */
-        overflow: hidden;
-        background-color: var(--bg-darker);
-    }
-    .project-image-container img {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        object-position: top center;
-    }
-    .project-image-container .no-image {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-    }
-    .card-link {
-        display: block;
-        color: inherit;
-        text-decoration: none;
-    }
-    .card-link:hover {
-        color: inherit;
-    }
+
 
     /* Search Bar Styling */
     .search-container {
@@ -236,25 +207,32 @@
                 const tags = card.dataset.tags || '';
                 const files = card.dataset.files || '';
                 
-                // Check if any of the fields contain the search term
-                if (name.includes(searchTerm) || 
+                const isMatch = name.includes(searchTerm) || 
                     description.includes(searchTerm) || 
                     tags.includes(searchTerm) ||
-                    files.includes(searchTerm)) {
-                    card.style.display = '';
+                    files.includes(searchTerm);
+                
+                if (isMatch) {
                     matchCount++;
+                    if ($(card).is(':hidden')) {
+                        $(card).removeClass('animate-enter').stop(true, false).fadeIn(200);
+                    }
                 } else {
-                    card.style.display = 'none';
+                    if ($(card).is(':visible')) {
+                        $(card).removeClass('animate-enter').stop(true, false).fadeOut(200);
+                    }
                 }
             });
             
             // Show or hide no results message
             if (matchCount === 0 && searchTerm.length > 0) {
-                projectsContainer.style.display = 'none';
-                noResults.style.display = 'block';
+                if ($(noResults).is(':hidden')) {
+                    $(noResults).removeClass('animate-enter').stop(true, false).fadeIn(200);
+                }
             } else {
-                projectsContainer.style.display = '';
-                noResults.style.display = 'none';
+                if ($(noResults).is(':visible')) {
+                    $(noResults).removeClass('animate-enter').stop(true, false).fadeOut(200);
+                }
             }
         }
         

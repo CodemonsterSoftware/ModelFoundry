@@ -14,6 +14,7 @@ ModelFoundry is a premium, self-hosted Django web application for managing, visu
 - **First-Login Onboarding Wizard:** New installations launch a guided setup wizard to create the first account, reducing friction for self-hosted deployments.
 - **Dynamic Theming:** Choose from multiple themes (Midnight Blue, Sunset Ember, Modern Mocha) with persistent per-user preferences.
 - **Settings & Diagnostics:** A unified settings page with theme selection, machine management, and live system/machine log viewers for debugging.
+- **Premium UI Redesign:** A comprehensive visual overhaul across the entire platform implementing a modern "Glassmorphic" aesthetic. Features include unified premium card layouts, interactive hover states, smart search filtering with dynamic fade animations, and highly polished designer and project detail pages.
 
 ---
 

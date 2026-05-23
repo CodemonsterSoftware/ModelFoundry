@@ -3,110 +3,144 @@
 {% block title %}{{ designer.name }} - ModelFoundry{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <!-- Designer Info -->
-        <div class="col-md-4">
-            <div class="card bg-dark text-light mb-4">
-                <div class="card-body">
-                    <div class="text-center mb-4">
-                        {% if designer.logo %}
-                            <img src="{{ designer.logo_thumbnail.url }}" alt="{{ designer.name }} logo" class="img-fluid rounded mb-3" style="max-height: 200px;">
-                        {% else %}
-                            <div class="bg-secondary rounded d-flex align-items-center justify-content-center mb-3" style="height: 200px;">
-                                <i class="fas fa-user fa-5x text-light"></i>
-                            </div>
-                        {% endif %}
-                        <h2>{{ designer.name }}</h2>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <h5 class="text-muted mb-3">Links</h5>
-                        <div class="list-group">
-                            {% if designer.mmf_url %}
-                            <a href="{{ designer.mmf_url }}" target="_blank" class="list-group-item list-group-item-action bg-dark text-light border-secondary">
-                                <i class="fas fa-store me-2"></i>MMF Store
-                            </a>
-                            {% endif %}
-                            {% if designer.patreon_url %}
-                            <a href="{{ designer.patreon_url }}" target="_blank" class="list-group-item list-group-item-action bg-dark text-light border-secondary">
-                                <i class="fab fa-patreon me-2"></i>Patreon
-                            </a>
-                            {% endif %}
-                            {% if designer.cults3d_url %}
-                            <a href="{{ designer.cults3d_url }}" target="_blank" class="list-group-item list-group-item-action bg-dark text-light border-secondary">
-                                <i class="fas fa-cube me-2"></i>Cults3D
-                            </a>
-                            {% endif %}
-                            {% if designer.website_url %}
-                            <a href="{{ designer.website_url }}" target="_blank" class="list-group-item list-group-item-action bg-dark text-light border-secondary">
-                                <i class="fas fa-globe me-2"></i>Website
-                            </a>
-                            {% endif %}
-                        </div>
-                    </div>
-                    
-                    <div class="d-grid gap-2">
-                        <a href="{% url 'projects:designer_index' %}" class="btn btn-dark">
-                            <i class="fas fa-arrow-left me-2"></i>Back to Designers
-                        </a>
-                    </div>
+<div class="container-fluid py-4">
+    <!-- Hero Section -->
+    <div class="row mb-5 animate-enter">
+        <div class="col-12">
+            <div class="card premium-card overflow-hidden" style="border-radius: var(--radius-xl); border: 1px solid rgba(255,255,255,0.05);">
+                <!-- Banner Background -->
+                <div class="designer-banner" style="height: 150px; background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), 0.2), rgba(var(--bs-info-rgb), 0.1)); position: relative;">
+                    <div class="position-absolute top-0 start-0 w-100 h-100" style="background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+CjxyZWN0IHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgZmlsbD0ibm9uZSI+PC9yZWN0Pgo8Y2lyY2xlIGN4PSIyIiBjeT0iMiIgcj0iMSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjA1KSI+PC9jaXJjbGU+Cjwvc3ZnPg==') repeat; opacity: 0.5;"></div>
                 </div>
-            </div>
-        </div>
-        
-        <!-- Projects -->
-        <div class="col-md-8">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h3>Projects</h3>
-                <span class="badge bg-secondary">{{ projects.count }} projects</span>
-            </div>
-            
-            <div class="row">
-                {% for project in projects %}
-                <div class="col-md-6 mb-4">
-                    <div class="card bg-dark text-light h-100">
-                        <div class="card-body">
-                            <h5 class="card-title">
-                                <a href="{% url 'projects:project_detail' project.id %}" class="text-decoration-none">
-                                    {{ project.name }}
-                                </a>
-                            </h5>
-                            <p class="card-text text-muted">
-                                <small>
-                                    <i class="fas fa-calendar me-1"></i>
-                                    Created: {{ project.created_at|date:"M d, Y" }}
-                                </small>
-                            </p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-secondary">
-                                    <i class="fas fa-cube me-1"></i>
-                                    {{ project.parts.count }} parts
-                                </span>
-                                <a href="{% url 'projects:project_detail' project.id %}" class="btn btn-sm btn-dark">
-                                    View Project
-                                </a>
+                
+                <div class="card-body p-4 p-md-5 position-relative" style="margin-top: -60px;">
+                    <div class="row align-items-end">
+                        <div class="col-auto">
+                            <!-- Logo -->
+                            <div class="designer-logo-hero shadow-lg" style="width: 120px; height: 120px; border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-dark); border: 3px solid var(--border-dark); display: flex; align-items: center; justify-content: center;">
+                                {% if designer.logo %}
+                                    <img src="{{ designer.logo_thumbnail.url }}" alt="{{ designer.name }} logo" class="img-fluid" style="object-fit: contain; width: 100%; height: 100%; padding: 0.5rem;">
+                                {% else %}
+                                    <i class="fas fa-user-circle fa-4x text-muted"></i>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col pt-3 pt-md-0 ms-md-2">
+                            <!-- Name and Stats -->
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-end gap-3">
+                                <div>
+                                    <h1 class="fw-bold mb-2 text-light">{{ designer.name }}</h1>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <span class="badge bg-dark border border-secondary text-light px-3 py-2" style="border-radius: var(--radius-md);">
+                                            <i class="fas fa-folder text-warning me-2"></i>{{ projects.count }} Projects
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Links -->
+                                <div class="d-flex flex-wrap gap-2">
+                                    {% if designer.mmf_url %}
+                                    <a href="{{ designer.mmf_url }}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-sm hover-lift" title="MyMiniFactory">
+                                        <i class="fas fa-store me-1"></i> MMF
+                                    </a>
+                                    {% endif %}
+                                    {% if designer.patreon_url %}
+                                    <a href="{{ designer.patreon_url }}" target="_blank" class="btn btn-sm btn-outline-danger rounded-pill px-3 shadow-sm hover-lift" title="Patreon">
+                                        <i class="fab fa-patreon me-1"></i> Patreon
+                                    </a>
+                                    {% endif %}
+                                    {% if designer.cults3d_url %}
+                                    <a href="{{ designer.cults3d_url }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm hover-lift" title="Cults3D">
+                                        <i class="fas fa-cube me-1"></i> Cults3D
+                                    </a>
+                                    {% endif %}
+                                    {% if designer.website_url %}
+                                    <a href="{{ designer.website_url }}" target="_blank" class="btn btn-sm btn-outline-light rounded-pill px-3 shadow-sm hover-lift" title="Website">
+                                        <i class="fas fa-globe me-1"></i> Website
+                                    </a>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                {% empty %}
-                <div class="col-12">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>No projects found for this designer.
-                    </div>
-                </div>
-                {% endfor %}
             </div>
         </div>
     </div>
-</div>
 
-<style>
-    .list-group-item-action:hover {
-        background-color: var(--border-color);
-        border-color: var(--border-color);
-        color: var(--text-light);
-    }
-</style>
+    <!-- Header & Breadcrumbs -->
+    <div class="row mb-4 align-items-end animate-enter" style="animation-delay: 100ms;">
+        <div class="col">
+            <h3 class="mb-0 fw-bold text-light"><i class="fas fa-folder-open me-2 text-primary"></i>Projects by {{ designer.name }}</h3>
+            <p class="text-muted mb-0 mt-1">Browse all designs and active prints from this creator.</p>
+        </div>
+        <div class="col-auto">
+            <a href="{% url 'projects:designer_index' %}" class="btn btn-outline-secondary rounded-pill px-4 shadow-sm hover-lift">
+                <i class="fas fa-arrow-left me-2"></i>Back to Designers
+            </a>
+        </div>
+    </div>
+
+    <!-- Projects Grid -->
+    {% if projects %}
+    <div class="row g-4" id="projectsContainer">
+        {% for project in projects %}
+        <div class="col-md-6 col-lg-4 col-xl-3 project-card animate-enter" 
+             style="animation-delay: {{ forloop.counter|add:'1' }}00ms;">
+            <div class="card h-100 premium-card hover-effect">
+                <a href="{% url 'projects:project_detail' project.pk %}" class="card-link d-flex flex-column h-100">
+                    <div class="project-image-container border-bottom border-dark">
+                        {% if project.images.first %}
+                        <img src="{{ project.images.first.image_thumbnail.url }}" alt="{{ project.name }}">
+                        {% else %}
+                        <div class="no-image">
+                            <i class="fas fa-cube fa-3x text-muted"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-body d-flex flex-column flex-grow-1">
+                        <h5 class="card-title fw-bold mb-3 text-light">{{ project.name }}</h5>
+                        
+                        <div class="mb-3">
+                            <span class="premium-badge">
+                                <i class="fas fa-cube text-info"></i> {{ project.total_parts }} Parts
+                            </span>
+                            <span class="premium-badge">
+                                {% if project.progress_percentage == 100 %}
+                                <i class="fas fa-check-circle text-success"></i> 100% Complete
+                                {% elif project.progress_percentage > 0 %}
+                                <i class="fas fa-tasks text-warning"></i> {{ project.progress_percentage }}% Complete
+                                {% else %}
+                                <i class="fas fa-hourglass-start text-muted"></i> 0% Complete
+                                {% endif %}
+                            </span>
+                        </div>
+                        
+                        <!-- Progress Bar -->
+                        <div class="mt-auto">
+                            <div class="progress" style="height: 6px; background-color: rgba(255,255,255,0.1); border-radius: 3px;">
+                                <div class="progress-bar {% if project.progress_percentage == 100 %}bg-success{% else %}bg-primary{% endif %}" 
+                                     role="progressbar" 
+                                     style="width: {{ project.progress_percentage }}%;" 
+                                     aria-valuenow="{{ project.progress_percentage }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state-dashed text-center p-5 animate-enter" style="animation-delay: 200ms;">
+        <div class="empty-icon mb-3">
+            <i class="fas fa-folder-open text-muted" style="font-size: 3rem;"></i>
+        </div>
+        <h4 class="fw-bold mb-2 text-light">No Projects Yet</h4>
+        <p class="text-muted mb-4">There are no projects associated with this designer.</p>
+    </div>
+    {% endif %}
+</div>
 {% endblock %} 
