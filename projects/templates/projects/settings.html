@@ -126,6 +126,14 @@
                                     <div class="form-text">Select your preferred system of measurement for volumes and weights.</div>
                                 </div>
                                 
+                                <div class="mb-4">
+                                    <div class="form-check form-switch mb-2 custom-switch-lg">
+                                        <input class="form-check-input" type="checkbox" id="autoNameParsing" name="auto_name_parsing" {% if general_settings.auto_name_parsing != False %}checked{% endif %} style="transform: scale(1.2); margin-top: 0.3rem;">
+                                        <label class="form-check-label  fw-bold ms-2" for="autoNameParsing">Auto Name Parsing</label>
+                                        <div class="form-text text-muted ms-2 mt-1">When enabled, part names and quantities are read from file names on upload (e.g. <code>earcup_x2_mirror</code>) and mirror pairs are auto-detected.</div>
+                                    </div>
+                                </div>
+                                
                                 <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
                                     <button type="submit" class="btn btn-primary px-4 shadow-sm" style="border-radius: var(--radius-md);">
                                         <i class="fas fa-save me-2"></i>Save Changes

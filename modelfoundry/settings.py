@@ -180,17 +180,26 @@ STATICFILES_DIRS = [
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Whitenoise Static Files Storage for aggressive compression and caching
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# Use standard storage during tests to avoid "Missing staticfiles manifest entry" errors
+import sys
+if 'test' in sys.argv:
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+else:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # File Upload Settings
-# Set maximum upload size to 5GB (5 * 1024 * 1024 * 1024 bytes)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5368709120  # 5GB in bytes
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5368709120  # 5GB in bytes
-DATA_UPLOAD_MAX_NUMBER_FILES = int(os.environ.get('DATA_UPLOAD_MAX_NUMBER_FILES', 200))
+# Files larger than this are streamed to a temp file on disk instead of being
+# held fully in RAM. Keep it small: with many large files in one request, a high
+# value buffers the entire batch in memory and can OOM the worker.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 8 * 1024 * 1024  # 8MB
+# Cap on non-file POST data (e.g. the parts JSON metadata). Multipart file
+# contents do not count against this limit.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 16 * 1024 * 1024  # 16MB
+DATA_UPLOAD_MAX_NUMBER_FILES = int(os.environ.get('DATA_UPLOAD_MAX_NUMBER_FILES', 2000))
 
 
 # Default primary key field type

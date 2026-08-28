@@ -36,7 +36,7 @@ class ProjectForm(forms.ModelForm):
 
     class Meta:
         model = Project
-        fields = ['name', 'description', 'designer', 'tags', 'source']
+        fields = ['name', 'description', 'designer', 'default_material', 'tags', 'source']
         widgets = {
             'description': forms.Textarea(attrs={'rows': 4}),
             'source': forms.URLInput(attrs={'placeholder': 'https://example.com/project-source'}),
@@ -50,6 +50,7 @@ class ProjectForm(forms.ModelForm):
             'name',
             'description',
             'designer',
+            'default_material',
             'source',
             Div(
                 'tags',
@@ -57,6 +58,7 @@ class ProjectForm(forms.ModelForm):
             )
         )
         self.fields['designer'].queryset = Designer.objects.all().order_by('name')
+        self.fields['default_material'].queryset = Material.objects.filter(is_active=True).order_by('name')
         if self.instance.pk:
             self.initial['tags'] = ', '.join(tag.name for tag in self.instance.tags.all())
 
@@ -94,8 +96,12 @@ class PartForm(forms.ModelForm):
 
     def __init__(self, *args, project=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['material'].required = True
         if project:
             self.fields['group'].queryset = project.groups.all()
+            # Pre-select the project's default material for new parts
+            if not self.instance.pk and project.default_material_id:
+                self.initial['material'] = project.default_material_id
 
 class GroupForm(forms.ModelForm):
     class Meta:
@@ -111,11 +117,6 @@ class ProjectImageForm(forms.ModelForm):
     class Meta:
         model = ProjectImage
         fields = ['image']
-
-class BulkUploadForm(forms.Form):
-    zip_file = forms.FileField(
-        help_text='Upload a ZIP file containing STL files to create multiple parts at once.'
-    )
 
 class DesignerForm(forms.ModelForm):
     class Meta:

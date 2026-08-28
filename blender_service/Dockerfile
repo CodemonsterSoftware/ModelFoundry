@@ -44,6 +44,7 @@ COPY convert.py .
 COPY step_export.py .
 COPY connectors.py .
 COPY dovetail.py .
+COPY scripts/ /app/scripts/
 
 # Create a volume mount point for media (shared with Django)
 RUN mkdir -p /app/media

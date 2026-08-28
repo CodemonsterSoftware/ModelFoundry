@@ -7,22 +7,35 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.urls import reverse_lazy, reverse
+from django.core.exceptions import RequestDataTooBig, TooManyFilesSent
 from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
+from django.http.multipartparser import MultiPartParserError
 from django.views.decorators.csrf import csrf_exempt
 import re
 from .models import Project, Part, Group, PurchasedPart, ProjectImage, Designer, Material, Instructions, UserSettings, Machine, UnclaimedSlice, Tag
 from .forms import (
     ProjectForm, PartForm, GroupForm, PurchasedPartForm,
-    ProjectImageForm, BulkUploadForm, DesignerForm, MaterialForm,
+    ProjectImageForm, DesignerForm, MaterialForm,
     MachineForm
 )
 from forge.services.ofd_client import OFDClient
 from .color_utils import get_closest_color_name
 from forge.module_registry import registry
-from django.db.models import Count, Sum, Max, Q
+from django.db import transaction
+from django.db.models import Count, Sum, Max, Q, F
 from django.contrib.auth.decorators import login_required
+from django.utils.text import slugify
 import tempfile
 from django.core.files import File
+from .smart_import import (
+    resolve_manifest_quantity,
+    mirror_pair_names,
+    parse_quantity_from_name,
+    mirror_counterpart_name,
+    is_mirror_marked,
+    _strip_mirror_token,
+)
+from .export_3mf import MIME_TYPE as THREE_MF_MIME, build_3mf_package, load_meshes
 import numpy as np
 from stl import mesh
 from django.contrib.auth.models import User
@@ -205,41 +218,6 @@ class ProjectDeleteView(DeleteView):
         self.object.delete()
         messages.success(request, 'Project deleted successfully.')
         return redirect(success_url)
-
-def upload_files(request, project_id):
-    project = get_object_or_404(Project, id=project_id)
-    
-    if request.method == 'POST':
-        form = BulkUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            zip_file = request.FILES['zip_file']
-            
-            with zipfile.ZipFile(zip_file) as z:
-                for filename in z.namelist():
-                    if filename.lower().endswith('.stl'):
-                        # Extract the file
-                        file_data = z.read(filename)
-                        part_name = os.path.splitext(os.path.basename(filename))[0]
-                        
-                        # Create the part
-                        part = Part.objects.create(
-                            project=project,
-                            name=part_name,
-                            quantity=1,  # Default value
-                            material='',  # Empty by default
-                            color='',  # Empty by default
-                            stl_file=file_data
-                        )
-            
-            messages.success(request, 'Files uploaded successfully')
-            return redirect('projects:project_detail', pk=project.id)
-    else:
-        form = BulkUploadForm()
-    
-    return render(request, 'projects/upload_files.html', {
-        'form': form,
-        'project': project
-    })
 
 def add_part(request, project_id):
     project = get_object_or_404(Project, id=project_id)
@@ -540,92 +518,304 @@ def update_purchased_part_status(request, part_id):
         'message': 'Invalid request method'
     }, status=400)
 
+def _upload_error_message(exc):
+    """Human-readable message for multipart parse errors."""
+    from django.conf import settings as django_settings
+    if isinstance(exc, TooManyFilesSent):
+        limit = django_settings.DATA_UPLOAD_MAX_NUMBER_FILES or 0
+        return f'That upload contains more than {limit} files — split it into smaller batches'
+    if isinstance(exc, RequestDataTooBig):
+        return 'The uploaded data exceeds the server size limit'
+    return str(exc) or 'Could not process the upload'
+
+
+def _create_part_rows(project, parts_data, file_count=None):
+    """Create Part rows (with mirror counterparts) from Add Parts metadata.
+
+    Returns (rows, None) on success or (None, error_message) on validation failure.
+    rows: [{'part_ids': [main_id, ...mirror_ids], 'has_file': bool}, ...] in input order.
+    Mirror counterparts are created without a file; the caller links them to the
+    main part's file once it is saved. Fileless mains never get a counterpart.
+
+    Rows declare has_file explicitly (two-phase flow). Legacy payloads omit it —
+    they default to True, capped by file_count so rows beyond the supplied files
+    stay fileless (matching the old index-aligned behavior).
+
+    Caller must wrap this in a transaction.
+    """
+    rows = []
+    file_idx = 0
+    for part_data in parts_data:
+        name_raw = str(part_data.get('name') or '').strip()
+        if not name_raw:
+            return None, 'Part name is required'
+
+        try:
+            quantity = int(part_data.get('quantity'))
+        except (TypeError, ValueError):
+            return None, f"Invalid quantity for part '{name_raw}'"
+        if quantity < 1:
+            return None, f"Quantity must be at least 1 for part '{name_raw}'"
+
+        material_id = part_data.get('material') or (project.default_material_id if project.default_material else None)
+        if not material_id:
+            return None, f"Material is required for part '{name_raw}' — pick one per part or set a default material on the project"
+
+        name_clean = _strip_mirror_token(name_raw)
+        if 'has_file' in part_data:
+            has_file = bool(part_data['has_file'])
+        else:
+            has_file = file_count is None or file_idx < file_count
+            if has_file:
+                file_idx += 1
+
+        # Mirror pairs split the quantity across both parts (total preserved:
+        # 2 -> 1+1, 3 -> 2+1). A single piece can't be halved, so each side
+        # keeps at least 1.
+        if part_data.get('mirror') and has_file:
+            main_qty = max(1, -(-quantity // 2))
+            mirror_qty = max(1, quantity // 2)
+        else:
+            main_qty = quantity
+
+        part = Part.objects.create(
+            project=project,
+            name=name_clean,
+            quantity=main_qty,
+            material_id=material_id,
+            color=part_data.get('color')
+        )
+
+        if part_data.get('group'):
+            group = get_object_or_404(Group, id=part_data['group'])
+            part.group = group
+            part.save()
+
+        part_ids = [part.id]
+
+        # Mirror counterpart for rows flagged with the smart import mirror
+        # toggle. It will share the main part's STL file once that is saved.
+        if part_data.get('mirror') and has_file:
+            mirror_name = part_data.get('mirror_name')
+            if not mirror_name:
+                main_name, mirror_name = mirror_pair_names(part.name)
+                if main_name != part.name:
+                    part.name = main_name
+                    part.save()
+            mirror_part = Part(
+                project=project,
+                name=mirror_name,
+                quantity=mirror_qty,
+                material=part.material,
+                color=part.color,
+                group=part.group,
+            )
+            mirror_part.save()
+            part_ids.append(mirror_part.id)
+
+        rows.append({'part_ids': part_ids, 'has_file': has_file})
+
+    return rows, None
+
+
+@login_required
+@require_POST
+def parts_create(request, project_id):
+    """Phase 1 of Add Parts: create part rows from metadata only (no files)."""
+    project = get_object_or_404(Project, id=project_id)
+
+    try:
+        parts_data = json.loads(request.POST.get('parts', '[]'))
+    except (TypeError, ValueError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid parts payload'}, status=400)
+
+    if not isinstance(parts_data, list) or not parts_data:
+        return JsonResponse({'status': 'error', 'message': 'No parts provided'}, status=400)
+
+    try:
+        with transaction.atomic():
+            rows, error = _create_part_rows(project, parts_data)
+            if error:
+                # Roll back any rows created before the invalid one
+                transaction.set_rollback(True)
+                return JsonResponse({'status': 'error', 'message': error}, status=400)
+    except Exception as e:
+        logger.error(f"Error in parts_create: {e}")
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    pipeline_total = sum(len(row['part_ids']) for row in rows if row['has_file'])
+    task_id = None
+    if pipeline_total:
+        from projects import progress
+        from projects.volume import generate_task_id
+        task_id = generate_task_id()
+        progress.create_task(task_id, pipeline_total)
+
+    return JsonResponse({
+        'status': 'success',
+        'task_id': task_id,
+        'rows': rows,
+        'pipeline_total': pipeline_total,
+    })
+
+
+@login_required
+@require_POST
+def parts_upload(request, project_id):
+    """Phase 2 of Add Parts: attach one chunk of uploaded files to parts created by parts_create."""
+    project = get_object_or_404(Project, id=project_id)
+
+    try:
+        assignments = json.loads(request.POST.get('assignments', '[]'))
+        task_id = request.POST.get('task_id') or None
+        uploaded_rows = int(request.POST.get('uploaded_rows', '0'))
+        file_rows = int(request.POST.get('file_rows', '0'))
+
+        if not isinstance(assignments, list) or not assignments:
+            return JsonResponse({'status': 'error', 'message': 'No file assignments provided'}, status=400)
+        for assignment in assignments:
+            part_ids = assignment.get('part_ids') if isinstance(assignment, dict) else None
+            if not part_ids or not all(isinstance(pid, int) for pid in part_ids):
+                return JsonResponse({'status': 'error', 'message': 'Invalid file assignment'}, status=400)
+
+        files = request.FILES.getlist('files')
+        if len(files) != len(assignments):
+            return JsonResponse({'status': 'error', 'message': 'Each assignment needs exactly one file'}, status=400)
+
+        all_part_ids = [pid for a in assignments for pid in a['part_ids']]
+        parts_by_id = {p.id: p for p in Part.objects.filter(id__in=all_part_ids, project=project)}
+        missing = [pid for pid in all_part_ids if pid not in parts_by_id]
+        if missing:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Unknown part id(s): {", ".join(str(pid) for pid in missing)}'
+            }, status=400)
+
+        with transaction.atomic():
+            pipeline_items = []
+            for assignment, file in zip(assignments, files):
+                part_ids = assignment['part_ids']
+                main_part = parts_by_id[part_ids[0]]
+                # Skip synchronous volume + thumbnail — background pipeline handles both
+                main_part._skip_volume = True
+                main_part._skip_thumbnail = True
+                main_part.stl_file.save(file.name, file, save=True)
+                for part_id in part_ids:
+                    if part_id != part_ids[0]:
+                        mirror_part = parts_by_id[part_id]
+                        mirror_part._skip_volume = True
+                        mirror_part._skip_thumbnail = True
+                        mirror_part.stl_file = main_part.stl_file
+                        mirror_part.save(update_fields=['stl_file'])
+                    pipeline_items.append((part_id, main_part.stl_file.path))
+
+        uploads_complete = file_rows > 0 and uploaded_rows >= file_rows
+        if task_id and pipeline_items:
+            from projects import progress
+            from projects.volume import dispatch_pipeline
+            progress.append_items(task_id, pipeline_items)
+            progress.update_task(task_id, phase='upload', status=f'Saving files ({uploaded_rows}/{file_rows})')
+            dispatch_pipeline(task_id)
+            if uploads_complete:
+                progress.set_uploads_done(task_id)
+
+        return JsonResponse({
+            'status': 'success',
+            'files_saved': len(files),
+            'uploaded_rows': uploaded_rows,
+            'done': uploads_complete,
+        })
+
+    except (TooManyFilesSent, RequestDataTooBig, MultiPartParserError) as e:
+        return JsonResponse({'status': 'error', 'message': _upload_error_message(e)}, status=400)
+    except Exception as e:
+        logger.error(f"Error in parts_upload: {e}")
+        return JsonResponse({'status': 'error', 'message': f'Failed to save files: {e}'}, status=400)
+
+
 def add_multiple_parts(request, project_id):
     project = get_object_or_404(Project, id=project_id)
     
     if request.method == 'POST':
         try:
-            import time
             # Get the parts data from the request
             parts_data = json.loads(request.POST.get('parts', '[]'))
-            created_parts = []
-            
-            # Process each part
-            for part_data in parts_data:
-                # Create the part
-                part = Part.objects.create(
-                    project=project,
-                    name=part_data['name'],
-                    quantity=part_data['quantity'],
-                    material_id=part_data['material'],
-                    color=part_data['color']
-                )
-                created_parts.append(part)
-                
-                # Set the group if specified
-                if part_data.get('group'):
-                    group = get_object_or_404(Group, id=part_data['group'])
-                    part.group = group
-                    part.save()
-            
-            # Handle file uploads — thumbnails + volumes are deferred to
-            # a background pipeline with progress tracking
             files = request.FILES.getlist('files')
-            processing_start_time = time.time()
-            processed_files = 0
-            pipeline_tasks = []  # (part_id, file_path) for background processing
-            
-            for i, file in enumerate(files):
-                if i < len(created_parts):
-                    part = created_parts[i]
+            with transaction.atomic():
+                rows, error = _create_part_rows(project, parts_data, file_count=len(files))
+                if error:
+                    # Roll back any rows created before the invalid one
+                    transaction.set_rollback(True)
+                    return JsonResponse({'status': 'error', 'message': error}, status=400)
+
+                # Handle file uploads — thumbnails + volumes are deferred to
+                # a background pipeline with progress tracking
+                pipeline_tasks = []  # (part_id, file_path) for background processing
+                files_saved = 0
+                file_idx = 0
+                for row in rows:
+                    if not row['has_file'] or file_idx >= len(files):
+                        continue
+                    file = files[file_idx]
+                    file_idx += 1
+                    main_part = Part.objects.get(id=row['part_ids'][0])
                     # Skip synchronous volume + thumbnail — background pipeline handles both
-                    part._skip_volume = True
-                    part._skip_thumbnail = True
-                    file_start_time = time.time()
-                    part.stl_file.save(file.name, file, save=True)
-                    pipeline_tasks.append((part.id, part.stl_file.path))
-                    
-                    file_process_time = time.time() - file_start_time
-                    processed_files += 1
-                    
-                    logger.debug(f"Processed {part.name} in {file_process_time:.2f}s (thumbnails + volumes deferred)")
-            
-            total_processing_time = time.time() - processing_start_time
-            
+                    main_part._skip_volume = True
+                    main_part._skip_thumbnail = True
+                    main_part.stl_file.save(file.name, file, save=True)
+                    for part_id in row['part_ids']:
+                        if part_id != row['part_ids'][0]:
+                            mirror_part = Part.objects.get(id=part_id)
+                            mirror_part._skip_volume = True
+                            mirror_part._skip_thumbnail = True
+                            mirror_part.stl_file = main_part.stl_file
+                            mirror_part.save(update_fields=['stl_file'])
+                        pipeline_tasks.append((part_id, main_part.stl_file.path))
+                    files_saved += 1
+
             # Create progress task and dispatch background pipeline
             task_id = None
             if pipeline_tasks:
                 from projects.volume import process_parts_background, generate_task_id
                 from projects import progress
-                
+
                 task_id = generate_task_id()
                 progress.create_task(task_id, len(pipeline_tasks))
                 # Mark upload phase as complete (files are saved)
                 progress.update_task(task_id, phase='upload', completed=len(pipeline_tasks),
                                      status='Files saved')
                 process_parts_background(task_id, pipeline_tasks)
-            
+
             return JsonResponse({
                 'status': 'success',
                 'task_id': task_id,
                 'total_parts': len(pipeline_tasks),
-                'processing_time': total_processing_time,
-                'files_processed': processed_files
+                'files_processed': files_saved
             })
-            
+
+        except (TooManyFilesSent, RequestDataTooBig, MultiPartParserError) as e:
+            return JsonResponse({'status': 'error', 'message': _upload_error_message(e)}, status=400)
         except Exception as e:
             logger.error(f"Error in add_multiple_parts: {str(e)}")
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-    
+
     # For GET requests, render the template
     groups = project.groups.all()
     materials = Material.objects.filter(is_active=True).order_by('name')
     material_types = Material.MATERIAL_TYPES
+    auto_name_parsing = True
+    try:
+        general_settings = request.user.usersettings_set.get(settings_type='general')
+        settings_data = json.loads(general_settings.settings_data)
+        auto_name_parsing = settings_data.get('auto_name_parsing', True) is not False
+    except Exception:
+        pass
     return render(request, 'projects/add_parts.html', {
         'project': project,
         'groups': groups,
         'materials': materials,
-        'material_types': material_types
+        'material_types': material_types,
+        'auto_name_parsing': auto_name_parsing,
     })
 
 
@@ -1129,6 +1319,8 @@ def export_project(request, project_id):
                 'designer_info': designer_info,
                 # Keep designer_id for backward compatibility but it won't be used for imports
                 'designer_id': project.designer.id if project.designer else None,
+                'default_material_id': project.default_material.id if project.default_material else None,
+                'default_material_name': project.default_material.name if project.default_material else None,
                 'tags': [tag.name for tag in project.tags.all()]
             },
             'materials': [],
@@ -1144,6 +1336,10 @@ def export_project(request, project_id):
         for part in project.parts.all():
             if part.material:
                 materials_used.add(part.material)
+        # Include the default material even if no part uses it, so it
+        # round-trips through export/import
+        if project.default_material:
+            materials_used.add(project.default_material)
         
         for material in materials_used:
             material_data = {
@@ -1336,144 +1532,7 @@ def import_project(request):
                 
                 logger.info(f"Importing project: {project_data['metadata']['name']}")
 
-                # Find designer by name if available
-                designer = None
-                if designer_name := project_data['metadata'].get('designer'):
-                    designer = Designer.objects.filter(name=designer_name).first()
-                    # Log the designer search result
-                    if designer:
-                        logger.info(f"Found designer: {designer.name} (ID: {designer.id})")
-                    else:
-                        logger.info(f"Designer '{designer_name}' not found in database, creating a new one.")
-                        designer_info = project_data['metadata'].get('designer_info', {})
-                        designer = Designer.objects.create(
-                            name=designer_name,
-                            mmf_url=designer_info.get('mmf_url', ''),
-                            patreon_url=designer_info.get('patreon_url', ''),
-                            cults3d_url=designer_info.get('cults3d_url', ''),
-                            website_url=designer_info.get('website_url', '')
-                        )
-
-                # Create the project
-                project = Project.objects.create(
-                    name=project_data['metadata']['name'],
-                    description=project_data['metadata']['description'],
-                    user=request.user,
-                    designer=designer  # Use the designer object or None
-                )
-                
-                # Import tags
-                for tag_name in project_data['metadata'].get('tags', []):
-                    tag, _ = Tag.objects.get_or_create(name=tag_name)
-                    project.tags.add(tag)
-                logger.info(f"Created project: {project.name} (ID: {project.id})")
-
-                # Create or get materials
-                materials = {}
-                for material_data in project_data['materials']:
-                    # Try to get existing material by name
-                    existing_material = Material.objects.filter(name=material_data['name']).first()
-                    if existing_material:
-                        logger.info(f"Using existing material: {existing_material.name}")
-                        materials[material_data['id']] = existing_material
-                    else:
-                        # Create new material
-                        logger.info(f"Creating new material: {material_data['name']}")
-                        material = Material.objects.create(
-                            name=material_data['name'],
-                            type=material_data['type'],
-                            description=material_data['description'],
-                            density=material_data['density'],
-                            color=material_data['color'],
-                            is_active=material_data['is_active'],
-                            brand=material_data['brand'],
-                            link=material_data['link'],
-                            cost=material_data['cost'],
-                            weight=material_data['weight']
-                        )
-                        materials[material_data['id']] = material
-
-                # Create groups
-                groups = {}
-                for group_data in project_data['groups']:
-                    group = Group.objects.create(
-                        name=group_data['name'],
-                        project=project
-                    )
-                    groups[group_data['id']] = group
-
-                # Create parts
-                for part_data in project_data['parts']:
-                    part = Part.objects.create(
-                        project=project,
-                        name=part_data['name'],
-                        quantity=part_data['quantity'],
-                        material=materials.get(part_data['material_id']),
-                        color=part_data['color'],
-                        completed=part_data['completed'],
-                        group=groups.get(part_data['group_id']),
-                        volume=part_data['volume']
-                    )
-
-                    # Handle STL file
-                    if part_data.get('stl_file'):
-                        stl_path = os.path.join(temp_dir, part_data['stl_file'])
-                        if os.path.exists(stl_path):
-                            with open(stl_path, 'rb') as f:
-                                part.stl_file.save(os.path.basename(stl_path), File(f), save=True)
-
-                    # Handle thumbnail
-                    if part_data.get('thumbnail'):
-                        thumbnail_path = os.path.join(temp_dir, part_data['thumbnail'])
-                        if os.path.exists(thumbnail_path):
-                            with open(thumbnail_path, 'rb') as f:
-                                part.thumbnail.save(os.path.basename(thumbnail_path), File(f), save=True)
-
-                # Create purchased parts
-                for part_data in project_data['purchased_parts']:
-                    PurchasedPart.objects.create(
-                        project=project,
-                        name=part_data['name'],
-                        price=part_data['price'],
-                        quantity=part_data['quantity'],
-                        link=part_data['link'],
-                        status=part_data['status']
-                    )
-
-                # Create instructions
-                for instruction_data in project_data['instructions']:
-                    instruction = Instructions.objects.create(
-                        project=project,
-                        description=instruction_data['description'],
-                        order=instruction_data['order']
-                    )
-
-                    # Handle instruction file
-                    if instruction_data.get('file'):
-                        file_path = os.path.join(temp_dir, instruction_data['file'])
-                        if os.path.exists(file_path):
-                            with open(file_path, 'rb') as f:
-                                instruction.file.save(os.path.basename(file_path), File(f), save=True)
-                    # Backward compatibility: also check for 'image' key
-                    elif instruction_data.get('image'):
-                        image_path = os.path.join(temp_dir, instruction_data['image'])
-                        if os.path.exists(image_path):
-                            with open(image_path, 'rb') as f:
-                                instruction.file.save(os.path.basename(image_path), File(f), save=True)
-
-                # Create project images
-                for image_data in project_data['project_images']:
-                    image = ProjectImage.objects.create(
-                        project=project,
-                        uploaded_at=datetime.fromisoformat(image_data['uploaded_at'])
-                    )
-
-                    # Handle project image
-                    if image_data.get('image'):
-                        image_path = os.path.join(temp_dir, image_data['image'])
-                        if os.path.exists(image_path):
-                            with open(image_path, 'rb') as f:
-                                image.image.save(os.path.basename(image_path), File(f), save=True)
+                project = _import_project_data(project_data, temp_dir, request.user)
 
                 messages.success(request, 'Project imported successfully!')
                 return redirect('projects:project_detail', pk=project.id)
@@ -1485,6 +1544,167 @@ def import_project(request):
             return redirect('projects:index')
 
     return render(request, 'projects/import_project.html')
+
+
+@transaction.atomic
+def _import_project_data(project_data, temp_dir, user):
+    """Create all objects for an imported project.
+
+    Atomic so a mid-import failure rolls back instead of leaving partial
+    data behind. Returns the new Project.
+    """
+    # Find designer by name if available
+    designer = None
+    if designer_name := project_data['metadata'].get('designer'):
+        designer = Designer.objects.filter(name=designer_name).first()
+        # Log the designer search result
+        if designer:
+            logger.info(f"Found designer: {designer.name} (ID: {designer.id})")
+        else:
+            logger.info(f"Designer '{designer_name}' not found in database, creating a new one.")
+            designer_info = project_data['metadata'].get('designer_info', {})
+            designer = Designer.objects.create(
+                name=designer_name,
+                mmf_url=designer_info.get('mmf_url', ''),
+                patreon_url=designer_info.get('patreon_url', ''),
+                cults3d_url=designer_info.get('cults3d_url', ''),
+                website_url=designer_info.get('website_url', '')
+            )
+
+    # Create the project
+    project = Project.objects.create(
+        name=project_data['metadata']['name'],
+        description=project_data['metadata']['description'],
+        user=user,
+        designer=designer  # Use the designer object or None
+    )
+
+    # Import tags
+    for tag_name in project_data['metadata'].get('tags', []):
+        tag, _ = Tag.objects.get_or_create(name=tag_name)
+        project.tags.add(tag)
+    logger.info(f"Created project: {project.name} (ID: {project.id})")
+
+    # Create or get materials
+    materials = {}
+    for material_data in project_data['materials']:
+        # Try to get existing material by name
+        existing_material = Material.objects.filter(name=material_data['name']).first()
+        if existing_material:
+            logger.info(f"Using existing material: {existing_material.name}")
+            materials[material_data['id']] = existing_material
+        else:
+            # Create new material
+            logger.info(f"Creating new material: {material_data['name']}")
+            material = Material.objects.create(
+                name=material_data['name'],
+                type=material_data['type'],
+                description=material_data['description'],
+                density=material_data['density'],
+                color=material_data['color'],
+                is_active=material_data['is_active'],
+                brand=material_data['brand'],
+                link=material_data['link'],
+                cost=material_data['cost'],
+                weight=material_data['weight']
+            )
+            materials[material_data['id']] = material
+
+    # Resolve the project's default material — pre-selected for new parts and
+    # fallback for parts whose material_id is missing or unknown
+    default_material = None
+    if default_material_id := project_data['metadata'].get('default_material_id'):
+        default_material = materials.get(default_material_id) or Material.objects.filter(id=default_material_id).first()
+    if default_material is None and (default_material_name := project_data['metadata'].get('default_material_name')):
+        default_material = Material.objects.filter(name=default_material_name).first()
+    if default_material and project.default_material != default_material:
+        project.default_material = default_material
+        project.save()
+
+    # Create groups
+    groups = {}
+    for group_data in project_data['groups']:
+        group = Group.objects.create(
+            name=group_data['name'],
+            project=project
+        )
+        groups[group_data['id']] = group
+
+    # Create parts
+    for part_data in project_data['parts']:
+        part = Part.objects.create(
+            project=project,
+            name=part_data['name'],
+            quantity=resolve_manifest_quantity(part_data),
+            material=materials.get(part_data['material_id']) or project.default_material,
+            color=part_data['color'],
+            completed=part_data['completed'],
+            group=groups.get(part_data['group_id']),
+            volume=part_data['volume']
+        )
+
+        # Handle STL file
+        if part_data.get('stl_file'):
+            stl_path = os.path.join(temp_dir, part_data['stl_file'])
+            if os.path.exists(stl_path):
+                with open(stl_path, 'rb') as f:
+                    part.stl_file.save(os.path.basename(stl_path), File(f), save=True)
+
+        # Handle thumbnail
+        if part_data.get('thumbnail'):
+            thumbnail_path = os.path.join(temp_dir, part_data['thumbnail'])
+            if os.path.exists(thumbnail_path):
+                with open(thumbnail_path, 'rb') as f:
+                    part.thumbnail.save(os.path.basename(thumbnail_path), File(f), save=True)
+
+    # Create purchased parts
+    for part_data in project_data['purchased_parts']:
+        PurchasedPart.objects.create(
+            project=project,
+            name=part_data['name'],
+            price=part_data['price'],
+            quantity=part_data.get('quantity', 1),
+            link=part_data['link'],
+            status=part_data['status']
+        )
+
+    # Create instructions
+    for instruction_data in project_data['instructions']:
+        instruction = Instructions.objects.create(
+            project=project,
+            description=instruction_data['description'],
+            order=instruction_data['order']
+        )
+
+        # Handle instruction file
+        if instruction_data.get('file'):
+            file_path = os.path.join(temp_dir, instruction_data['file'])
+            if os.path.exists(file_path):
+                with open(file_path, 'rb') as f:
+                    instruction.file.save(os.path.basename(file_path), File(f), save=True)
+        # Backward compatibility: also check for 'image' key
+        elif instruction_data.get('image'):
+            image_path = os.path.join(temp_dir, instruction_data['image'])
+            if os.path.exists(image_path):
+                with open(image_path, 'rb') as f:
+                    instruction.file.save(os.path.basename(image_path), File(f), save=True)
+
+    # Create project images
+    for image_data in project_data['project_images']:
+        image = ProjectImage.objects.create(
+            project=project,
+            uploaded_at=datetime.fromisoformat(image_data['uploaded_at'])
+        )
+
+        # Handle project image
+        if image_data.get('image'):
+            image_path = os.path.join(temp_dir, image_data['image'])
+            if os.path.exists(image_path):
+                with open(image_path, 'rb') as f:
+                    image.image.save(os.path.basename(image_path), File(f), save=True)
+
+    return project
+
 
 @login_required
 def material_delete(request, material_id):
@@ -1636,6 +1856,7 @@ def settings(request):
             if settings_type_submitted == 'general':
                 current_data['default_material'] = request.POST.get('default_material')
                 current_data['unit_system'] = request.POST.get('unit_system', 'imperial')
+                current_data['auto_name_parsing'] = request.POST.get('auto_name_parsing') == 'on'
 
             elif settings_type_submitted == 'appearance':
                 theme_preference = request.POST.get('theme_preference')
@@ -1705,6 +1926,7 @@ def settings(request):
 
     return render(request, 'projects/settings.html', {
         'forms': forms,
+        'general_settings': forms.get('general', {}),
         'appearance_settings': forms.get('appearance', {}),
         'api_settings': forms.get('api', {}),
         'system_settings': forms.get('system', {}),
@@ -1859,6 +2081,187 @@ def bulk_complete_parts(request, project_id):
     except Exception as e:
         logger.error(f'Error in bulk complete parts: {str(e)}')
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+@login_required
+def export_3mf(request, project_id):
+    """Export the selected parts' unprinted copies as a single .3mf file."""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Method not allowed'}, status=405)
+
+    project = get_object_or_404(Project, id=project_id)
+
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON body'}, status=400)
+
+    raw_ids = data.get('part_ids') or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return JsonResponse({'status': 'error', 'message': 'No parts selected'}, status=400)
+
+    part_ids = []
+    for value in raw_ids:
+        try:
+            part_ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    if not part_ids:
+        return JsonResponse({'status': 'error', 'message': 'No parts selected'}, status=400)
+
+    mark_complete = bool(data.get('mark_complete', False))
+
+    parts = list(Part.objects.filter(id__in=part_ids, project=project))
+    found_ids = {p.id for p in parts}
+    missing = [pid for pid in part_ids if pid not in found_ids]
+    if missing:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Parts not found in this project: {", ".join(str(m) for m in missing)}'
+        }, status=400)
+
+    # Resolve to leaf parts: a parent with sub-parts expands into its children,
+    # so selecting parent + children never double-counts geometry.
+    leaves = []
+    seen = set()
+    for part in parts:
+        if part.sub_parts.exists():
+            candidates = list(part.sub_parts.all())
+        else:
+            candidates = [part]
+        for candidate in candidates:
+            if candidate.id not in seen:
+                seen.add(candidate.id)
+                leaves.append(candidate)
+
+    logger.info(f'3MF export started for project {project.id}: {len(leaves)} part(s) selected')
+
+    entries = []
+    failed = []
+    total_copies = 0
+    for part in leaves:
+        remaining = part.quantity - part.completed
+        if remaining <= 0:
+            continue
+        if not part.stl_file:
+            failed.append(part.name)
+            continue
+        try:
+            meshes = load_meshes(part.stl_file.path)
+        except Exception as e:
+            logger.error(f'3MF export: failed to load geometry for {part.name}: {e}')
+            failed.append(part.name)
+            continue
+        if not meshes:
+            failed.append(part.name)
+            continue
+        entries.append({'meshes': meshes, 'copies': remaining})
+        total_copies += remaining * len(meshes)
+
+    logger.info(f'3MF export: {len(entries)} part(s) loaded, {total_copies} item(s) to place')
+
+    if failed:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Could not load geometry for: {", ".join(failed)}'
+        }, status=400)
+
+    if total_copies == 0:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'No unprinted copies in the selected parts'
+        }, status=400)
+
+    try:
+        content = build_3mf_package(entries)
+    except Exception as e:
+        logger.error(f'3MF export failed: {e}')
+        return JsonResponse({'status': 'error', 'message': f'Failed to build 3MF file: {e}'}, status=500)
+
+    if mark_complete:
+        Part.objects.filter(id__in=[p.id for p in leaves]).update(completed=F('quantity'))
+
+    filename = f'{slugify(project.name) or "project"}_parts.3mf'
+    response = HttpResponse(content, content_type=THREE_MF_MIME)
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+@login_required
+@require_POST
+@transaction.atomic
+def apply_smart_parsing(request, project_id):
+    """Retroactively apply smart import rules to a project's existing parts."""
+    project = get_object_or_404(Project, id=project_id)
+    parts = list(project.parts.all())
+    has_children_ids = {p.parent_id for p in parts if p.parent_id is not None}
+
+    quantities_updated = []
+    mirrors_created = []
+
+    # Pass 1: quantity. Only touch parts whose quantity is still the default (1);
+    # manually-set quantities are preserved. Token source: STL file name first,
+    # then the part name. The part name is cleaned when it carries the token.
+    for part in parts:
+        if part.quantity != 1:
+            continue
+        parsed = 1
+        if part.stl_file:
+            base_name = os.path.splitext(os.path.basename(part.stl_file.name))[0]
+            _, parsed = parse_quantity_from_name(base_name)
+        if parsed < 2:
+            _, parsed = parse_quantity_from_name(part.name)
+        if parsed < 2:
+            continue
+        part.quantity = parsed
+        cleaned, _ = parse_quantity_from_name(part.name)
+        if cleaned != part.name:
+            part.name = cleaned
+        part._skip_volume = True
+        part.save()
+        quantities_updated.append(f'{part.name} (1\u2192{parsed})')
+
+    # Pass 2: mirror. Create missing Left/Right counterparts for marked parts
+    # that share a file and have no sub-parts. Runs after pass 1 so the
+    # counterpart inherits any corrected quantity.
+    existing_names = {p.name.strip().casefold() for p in parts}
+    for part in parts:
+        if not is_mirror_marked(part.name) or not part.stl_file or part.id in has_children_ids:
+            continue
+        counterpart_name = mirror_counterpart_name(part.name)
+        if counterpart_name.strip().casefold() in existing_names:
+            continue
+        mirror_part = Part(
+            project=project,
+            name=counterpart_name,
+            quantity=part.quantity,
+            material=part.material,
+            color=part.color,
+            group=part.group,
+        )
+        mirror_part._skip_volume = True
+        mirror_part._skip_thumbnail = True
+        mirror_part.stl_file = part.stl_file
+        mirror_part.volume = part.volume
+        mirror_part.thumbnail = part.thumbnail
+        mirror_part.save()
+        existing_names.add(counterpart_name.strip().casefold())
+        mirrors_created.append(counterpart_name)
+
+    if not quantities_updated and not mirrors_created:
+        message = 'No changes needed \u2014 parts already match smart parsing rules'
+    else:
+        pieces = []
+        if quantities_updated:
+            pieces.append(f'{len(quantities_updated)} quantity updates')
+        if mirrors_created:
+            pieces.append(f'{len(mirrors_created)} mirror parts created')
+        message = 'Smart parsing applied: ' + ', '.join(pieces)
+
+    return JsonResponse({
+        'status': 'success',
+        'message': message,
+        'quantities_updated': quantities_updated,
+        'mirrors_created': mirrors_created,
+    })
 
 @login_required
 def api_ofd_inventory(request):
@@ -2682,3 +3085,68 @@ def first_setup(request):
         form = FirstSetupForm()
         
     return render(request, 'registration/setup.html', {'form': form})
+
+@login_required
+@require_POST
+def project_generate_thumbnails(request, project_id):
+    project = get_object_or_404(Project, id=project_id)
+    parts = project.parts.exclude(stl_file='').filter(thumbnail='')
+    pipeline_tasks = [(part.id, part.stl_file.path) for part in parts]
+    
+    if not pipeline_tasks:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'No parts found needing thumbnails.'
+        }, status=400)
+        
+    # Verify Blender sidecar is available before starting the task
+    from forge.services.blender_client import BlenderClient
+    client = BlenderClient()
+    if not client.is_available():
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Blender thumbnail service is currently offline. Please start it using Docker.'
+        }, status=503)
+        
+    from projects.volume import process_parts_background, generate_task_id
+    from projects import progress
+    
+    task_id = generate_task_id()
+    progress.create_task(task_id, len(pipeline_tasks))
+    progress.update_task(task_id, phase='upload', completed=len(pipeline_tasks), status='Files ready')
+    
+    process_parts_background(task_id, pipeline_tasks, run_thumbnails=True, run_volumes=False)
+    
+    return JsonResponse({
+        'status': 'success',
+        'task_id': task_id,
+        'total_parts': len(pipeline_tasks)
+    })
+
+@login_required
+@require_POST
+def project_calculate_volumes(request, project_id):
+    project = get_object_or_404(Project, id=project_id)
+    parts = project.parts.exclude(stl_file='').filter(volume__isnull=True)
+    pipeline_tasks = [(part.id, part.stl_file.path) for part in parts]
+    
+    if not pipeline_tasks:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'No parts found needing volume calculation.'
+        }, status=400)
+        
+    from projects.volume import process_parts_background, generate_task_id
+    from projects import progress
+    
+    task_id = generate_task_id()
+    progress.create_task(task_id, len(pipeline_tasks))
+    progress.update_task(task_id, phase='upload', completed=len(pipeline_tasks), status='Files ready')
+    
+    process_parts_background(task_id, pipeline_tasks, run_thumbnails=False, run_volumes=True)
+    
+    return JsonResponse({
+        'status': 'success',
+        'task_id': task_id,
+        'total_parts': len(pipeline_tasks)
+    })

@@ -54,63 +54,116 @@ def compute_volume(file_path):
 
 # ─── Background Pipeline ──────────────────────────────────────────────────
 
-def process_parts_background(task_id, part_ids_and_paths, max_workers=None):
+def dispatch_pipeline(task_id, max_workers=None, run_thumbnails=True, run_volumes=True):
     """
-    Fire-and-forget background processing pipeline.
+    Start the background pipeline consumer for a task (at most once per task).
 
-    Spawns a daemon thread that runs two phases:
+    The consumer waits until chunked uploads are finished
+    (progress.set_uploads_done), drains all enqueued items, then runs:
+      Phase 1.5: 3MF explosion
       Phase 2: Generate thumbnails via Blender (sequential HTTP calls)
       Phase 3: Compute volumes via ProcessPoolExecutor (parallel across cores)
 
-    Updates the progress store after each part completes.
-
     Args:
         task_id: Unique task ID for progress tracking.
-        part_ids_and_paths: List of (part_id, file_path) tuples.
         max_workers: Max parallel processes for volume calc.
+        run_thumbnails: Whether to run Phase 2 (thumbnails).
+        run_volumes: Whether to run Phase 3 (volumes).
     """
-    if not part_ids_and_paths:
+    from projects import progress
+
+    if not progress.start_consumer_once(task_id):
         return
 
     if max_workers is None:
         max_workers = min(4, os.cpu_count() or 2)
 
-    def _pipeline():
-        from django.db import connection
-        try:
-            from projects.models import Part
-            from projects import progress
-
-            # ── Phase 1.5: 3MF Explosion ─────────────────────────────
-            expanded_parts = _run_3mf_explosion_phase(task_id, part_ids_and_paths)
-            total = len(expanded_parts)
-
-            # ── Phase 2: Thumbnails ──────────────────────────────────
-            _run_thumbnail_phase(task_id, expanded_parts, total)
-
-            # ── Phase 3: Volumes ─────────────────────────────────────
-            _run_volume_phase(task_id, expanded_parts, total, max_workers)
-
-            # ── Done ─────────────────────────────────────────────────
-            progress.complete_task(task_id)
-            logger.info(f"[pipeline] Task {task_id}: all phases complete")
-
-        except Exception as e:
-            logger.error(f"[pipeline] Task {task_id} error: {e}")
-            from projects import progress
-            progress.complete_task(task_id)  # Mark done so frontend stops polling
-        finally:
-            connection.close()
-
-    thread = threading.Thread(target=_pipeline, daemon=True)
+    thread = threading.Thread(
+        target=_pipeline_loop,
+        args=(task_id, max_workers, run_thumbnails, run_volumes),
+        daemon=True,
+    )
     thread.start()
-    logger.info(f"[pipeline] Task {task_id}: dispatched {len(part_ids_and_paths)} parts to background")
+    logger.info(f"[pipeline] Task {task_id}: consumer dispatched")
+
+
+def process_parts_background(task_id, part_ids_and_paths, max_workers=None, run_thumbnails=True, run_volumes=True):
+    """
+    Legacy single-shot dispatch: enqueue all items, mark uploads done, start the consumer.
+
+    Args:
+        task_id: Unique task ID for progress tracking.
+        part_ids_and_paths: List of (part_id, file_path) tuples.
+        max_workers: Max parallel processes for volume calc.
+        run_thumbnails: Whether to run Phase 2 (thumbnails).
+        run_volumes: Whether to run Phase 3 (volumes).
+    """
+    if not part_ids_and_paths:
+        return
+
+    from projects import progress
+    progress.append_items(task_id, list(part_ids_and_paths))
+    progress.set_uploads_done(task_id)
+    dispatch_pipeline(task_id, max_workers=max_workers, run_thumbnails=run_thumbnails, run_volumes=run_volumes)
+
+
+def _pipeline_loop(task_id, max_workers, run_thumbnails, run_volumes):
+    """Consumer thread: wait for uploads to finish, then run all phases."""
+    from django.db import close_old_connections
+    # Close stale/old connections to force a fresh thread-safe connection check
+    close_old_connections()
+    try:
+        from projects import progress
+
+        logger.info(f"[pipeline] Task {task_id}: waiting for uploads to finish")
+        uploads_done = progress.wait_uploads_done(task_id)
+        part_ids_and_paths = progress.drain_pending(task_id)
+
+        if not uploads_done:
+            logger.warning(
+                f"[pipeline] Task {task_id}: upload wait timed out; "
+                f"processing {len(part_ids_and_paths)} received item(s)"
+            )
+        if not part_ids_and_paths:
+            progress.complete_task(task_id)
+            return
+
+        logger.info(f"[pipeline] Task {task_id}: starting phases with {len(part_ids_and_paths)} items")
+
+        # ── Phase 1.5: 3MF Explosion ─────────────────────────────
+        expanded_parts = _run_3mf_explosion_phase(task_id, part_ids_and_paths)
+        total = len(expanded_parts)
+        logger.info(f"[pipeline] Task {task_id}: finished 3MF explosion phase. Total: {total}")
+
+        # ── Phase 2: Thumbnails ──────────────────────────────────
+        if run_thumbnails:
+            _run_thumbnail_phase(task_id, expanded_parts, total)
+        else:
+            progress.skip_phase(task_id, 'thumbnails', reason='Skipped')
+
+        # ── Phase 3: Volumes ─────────────────────────────────────
+        if run_volumes:
+            _run_volume_phase(task_id, expanded_parts, total, max_workers)
+        else:
+            progress.skip_phase(task_id, 'volumes', reason='Skipped')
+
+        # ── Done ─────────────────────────────────────────────────
+        progress.complete_task(task_id)
+        logger.info(f"[pipeline] Task {task_id}: all phases complete")
+
+    except Exception as e:
+        logger.error(f"[pipeline] Task {task_id} error: {e}")
+        from projects import progress
+        progress.complete_task(task_id)  # Mark done so frontend stops polling
+    finally:
+        close_old_connections()
 
 
 def _run_3mf_explosion_phase(task_id, part_ids_and_paths):
     """Phase 1.5: Explode 3MF files into individual OBJ parts."""
     from projects.models import Part
     from projects import progress
+    from django.db import close_old_connections
     import tempfile
     import os
 
@@ -123,6 +176,8 @@ def _run_3mf_explosion_phase(task_id, part_ids_and_paths):
         if not file_path or not file_path.lower().endswith('.3mf'):
             continue
             
+        logger.info(f"[pipeline] Exploding 3MF file {file_path} for part {part_id}")
+        close_old_connections()
         progress.update_task(task_id, status=f'Extracting parts from 3MF...')
         
         try:
@@ -130,39 +185,59 @@ def _run_3mf_explosion_phase(task_id, part_ids_and_paths):
             from django.core.files import File
             
             part = Part.objects.get(id=part_id)
+            logger.info(f"[pipeline] Loading 3MF scene from {file_path}")
             scene = trimesh.load(file_path, force='scene')
+            logger.info(f"[pipeline] 3MF scene loaded successfully. Graph nodes: {len(scene.graph.nodes_geometry) if hasattr(scene, 'graph') else 0}")
             
             if isinstance(scene, trimesh.Scene) and hasattr(scene, 'graph'):
                 count = 1
                 for node_name in scene.graph.nodes_geometry:
-                    geometry_id = scene.graph[node_name][1]
-                    mesh = scene.geometry[geometry_id]
-                    
-                    child_filename = f"{part.name}_{count}.obj"
-                    
-                    with tempfile.NamedTemporaryFile(suffix='.obj', delete=False) as temp_obj:
-                        mesh.export(temp_obj.name)
+                    try:
+                        geometry_id = scene.graph[node_name][1]
+                        mesh = scene.geometry.get(geometry_id)
                         
-                        with open(temp_obj.name, 'rb') as f:
-                            child_part = Part.objects.create(
-                                project=part.project,
-                                name=f"{part.name} - Part {count}",
-                                quantity=part.quantity,
-                                material=part.material,
-                                color=part.color,
-                                group=part.group,
-                                parent=part
-                            )
-                            # Skip synchronous processing for children
-                            child_part._skip_volume = True
-                            child_part._skip_thumbnail = True
-                            child_part.stl_file.save(child_filename, File(f), save=True)
+                        if not mesh or not isinstance(mesh, trimesh.Trimesh):
+                            logger.info(f"[pipeline] Node {node_name} has no valid 3D mesh geometry. Skipping.")
+                            continue
                             
-                            expanded_parts.append((child_part.id, child_part.stl_file.path))
-                            
-                    os.unlink(temp_obj.name)
-                    count += 1
-                    progress.update_task(task_id, status=f'Extracting parts from 3MF... ({count-1} extracted)')
+                        if len(mesh.vertices) == 0 or len(mesh.faces) == 0:
+                            logger.info(f"[pipeline] Mesh for node {node_name} is empty. Skipping.")
+                            continue
+
+                        child_filename = f"{part.name}_{count}.obj"
+                        temp_name = None
+                        
+                        try:
+                            with tempfile.NamedTemporaryFile(suffix='.obj', delete=False) as temp_obj:
+                                temp_name = temp_obj.name
+                                mesh.export(temp_name)
+                                
+                            with open(temp_name, 'rb') as f:
+                                close_old_connections()
+                                child_part = Part.objects.create(
+                                    project=part.project,
+                                    name=f"{part.name} - Part {count}",
+                                    quantity=part.quantity,
+                                    material=part.material,
+                                    color=part.color,
+                                    group=part.group,
+                                    parent=part
+                                )
+                                # Skip synchronous processing for children
+                                child_part._skip_volume = True
+                                child_part._skip_thumbnail = True
+                                child_part.stl_file.save(child_filename, File(f), save=True)
+                                
+                                expanded_parts.append((child_part.id, child_part.stl_file.path))
+                        finally:
+                            if temp_name and os.path.exists(temp_name):
+                                os.unlink(temp_name)
+                                
+                        count += 1
+                        progress.update_task(task_id, status=f'Extracting parts from 3MF... ({count-1} extracted)')
+                        
+                    except Exception as child_err:
+                        logger.error(f"[pipeline] 3MF child extraction failed for part {part_id}, node {node_name}: {child_err}")
                     
         except Exception as e:
             logger.error(f"[pipeline] 3MF explosion failed for part {part_id}: {e}")
@@ -175,6 +250,7 @@ def _run_thumbnail_phase(task_id, part_ids_and_paths, total):
     """Phase 2: Generate thumbnails via Blender sidecar."""
     from projects import progress
     from projects.models import Part
+    from django.db import close_old_connections
 
     progress.update_task(task_id, phase='thumbnails', completed=0,
                          status='Generating thumbnails...')
@@ -191,6 +267,7 @@ def _run_thumbnail_phase(task_id, part_ids_and_paths, total):
 
         for i, (part_id, file_path) in enumerate(part_ids_and_paths):
             try:
+                close_old_connections()
                 part = Part.objects.get(id=part_id)
                 if part.stl_file and not part.thumbnail:
                     import uuid as _uuid
@@ -220,11 +297,16 @@ def _run_volume_phase(task_id, part_ids_and_paths, total, max_workers):
     """Phase 3: Compute volumes in parallel via ProcessPoolExecutor."""
     from projects import progress
     from projects.models import Part
+    from django.db import connections, close_old_connections
 
     progress.update_task(task_id, phase='volumes', completed=0,
                          status='Calculating volumes...')
 
     completed_count = 0
+
+    # Close default connection before spawning process pool to prevent socket descriptors being shared in child forks
+    from django.db import connection
+    connection.close()
 
     with ProcessPoolExecutor(max_workers=max_workers) as pool:
         future_to_part = {
@@ -235,6 +317,7 @@ def _run_volume_phase(task_id, part_ids_and_paths, total, max_workers):
         for future in as_completed(future_to_part):
             part_id = future_to_part[future]
             try:
+                close_old_connections()
                 volume = future.result(timeout=120)
                 if volume is not None:
                     Part.objects.filter(id=part_id).update(volume=volume)

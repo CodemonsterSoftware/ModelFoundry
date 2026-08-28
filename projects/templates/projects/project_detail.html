@@ -443,6 +443,79 @@
     .bulk-action-bar.visible {
         bottom: 30px;
     }
+
+    /* Progress Modal & Stepper Styles */
+    .upload-progress-modal {
+        z-index: 1060;
+    }
+    .upload-progress-modal .modal-content {
+        background-color: var(--bg-darker) !important;
+        border-color: var(--border-dark) !important;
+    }
+    .upload-progress-modal .modal-header {
+        background-color: var(--bg-grey) !important;
+        border-bottom-color: var(--border-dark) !important;
+        color: var(--text-light) !important;
+    }
+    .upload-progress-modal .modal-body {
+        background-color: var(--bg-darker) !important;
+        color: var(--text-light) !important;
+    }
+    .upload-progress-modal .progress {
+        background-color: var(--bg-grey);
+        border-radius: 5px;
+    }
+    .upload-progress-modal .progress-bar {
+        background: linear-gradient(90deg, var(--primary-color), #22d3ee);
+        transition: width 0.6s ease;
+    }
+    .phase-row {
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid transparent;
+        transition: all 0.3s ease;
+    }
+    .phase-row.active {
+        background: rgba(var(--primary-color-rgb, 74, 222, 128), 0.08);
+        border-color: rgba(var(--primary-color-rgb, 74, 222, 128), 0.25);
+    }
+    .phase-row.completed {
+        opacity: 0.7;
+    }
+    .phase-row.skipped {
+        opacity: 0.4;
+    }
+    .phase-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255,255,255,0.05);
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        transition: all 0.3s ease;
+        flex-shrink: 0;
+    }
+    .phase-row.active .phase-icon {
+        background: var(--primary-color);
+        color: #000;
+        box-shadow: 0 0 12px rgba(var(--primary-color-rgb, 74, 222, 128), 0.4);
+    }
+    .phase-row.completed .phase-icon {
+        background: var(--primary-color);
+        color: #000;
+    }
+    .phase-row.skipped .phase-icon {
+        background: rgba(255,255,255,0.05);
+        color: var(--text-muted);
+    }
+    .phase-counter {
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
+    }
 </style>
 {% endblock %}
 
@@ -548,6 +621,28 @@
         <div class="card-header border-bottom border-dark d-flex justify-content-between align-items-center" style="background-color: transparent;">
             <h5 class="mb-0 fw-bold"><i class="fas fa-puzzle-piece me-2 text-primary"></i>Parts</h5>
             <div class="d-flex gap-2">
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="reprocessDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 8px;">
+                        <i class="fas fa-magic me-1"></i> Process STL
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-dark border-secondary" aria-labelledby="reprocessDropdown" style="font-size: 0.85rem; border-radius: 8px; background-color: var(--bg-dark);">
+                        <li>
+                            <button class="dropdown-item py-2 d-flex align-items-center" id="projectGenerateThumbnails">
+                                <i class="fas fa-image me-2 text-primary"></i> Generate Thumbnails
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item py-2 d-flex align-items-center" id="projectCalculateVolumes">
+                                <i class="fas fa-cube me-2 text-info"></i> Calculate Volumes
+                            </button>
+                        </li>
+                        <li>
+                            <button class="dropdown-item py-2 d-flex align-items-center" id="projectApplySmartParsing">
+                                <i class="fas fa-wand-magic-sparkles me-2 text-warning"></i> Apply Smart Parsing
+                            </button>
+                        </li>
+                    </ul>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleBulkEditBtn" style="border-radius: 8px;">
                     <i class="fas fa-tasks"></i> Bulk Edit
                 </button>
@@ -870,6 +965,66 @@
                     </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary" id="savePurchasedPartChanges">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reprocess Progress Modal -->
+    <div class="modal fade upload-progress-modal" id="uploadProgressModal" tabindex="-1" aria-labelledby="uploadProgressModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog">
+            <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+                <div class="modal-header border-bottom border-dark">
+                    <h5 class="modal-title fw-bold" id="uploadProgressModalLabel">
+                        <i class="fas fa-magic me-2 text-primary"></i>Processing Parts
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <!-- Overall progress bar -->
+                    <div class="progress mb-4" style="height: 8px;">
+                        <div class="progress-bar" role="progressbar" 
+                             id="uploadProgressBar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                    </div>
+
+                    <!-- Phase stepper -->
+                    <div class="d-flex flex-column gap-3">
+                        <!-- Phase 1: Upload (always complete for reprocess) -->
+                        <div class="phase-row d-flex align-items-center" id="phaseUpload">
+                            <div class="phase-icon me-3" id="phaseUploadIcon">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold" style="font-size: 0.95rem;">Prepare Files</div>
+                                <small class="text-muted" id="phaseUploadStatus">Complete</small>
+                            </div>
+                            <div class="phase-counter text-end" id="phaseUploadCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
+                        </div>
+
+                        <!-- Phase 2: Thumbnails -->
+                        <div class="phase-row d-flex align-items-center" id="phaseThumbnails">
+                            <div class="phase-icon me-3" id="phaseThumbnailsIcon">
+                                <i class="fas fa-image"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold" style="font-size: 0.95rem;">Generate Thumbnails</div>
+                                <small class="text-muted" id="phaseThumbnailsStatus">Waiting...</small>
+                            </div>
+                            <div class="phase-counter text-end" id="phaseThumbnailsCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
+                        </div>
+
+                        <!-- Phase 3: Volumes -->
+                        <div class="phase-row d-flex align-items-center" id="phaseVolumes">
+                            <div class="phase-icon me-3" id="phaseVolumesIcon">
+                                <i class="fas fa-cube"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold" style="font-size: 0.95rem;">Calculate Volumes</div>
+                                <small class="text-muted" id="phaseVolumesStatus">Waiting...</small>
+                            </div>
+                            <div class="phase-counter text-end" id="phaseVolumesCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1255,12 +1410,39 @@
         </div>
     </div>
 
+    <!-- Export .3MF Modal -->
+    <div class="modal fade" id="export3mfModal" tabindex="-1" aria-labelledby="export3mfModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+                <div class="modal-header border-bottom border-dark">
+                    <h5 class="modal-title fw-bold" id="export3mfModalLabel"><i class="fas fa-cube me-2 text-info"></i>Export to .3MF</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">Exports the unprinted copies of the selected parts into a single .3mf file, ready for your slicer.</p>
+                    <div class="fw-bold mb-3"><span id="export3mfPartCount">0</span> parts &rarr; <span id="export3mfCopyCount">0</span> copies</div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="export3mfMarkComplete" checked>
+                        <label class="form-check-label" for="export3mfMarkComplete">Mark parts as complete after export</label>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-dark">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmExport3mf"><i class="fas fa-download me-1"></i>Export .3MF</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Floating Bulk Action Bar -->
     <div class="bulk-action-bar" id="bulkActionBar">
         <span class=" fw-bold"><span id="bulkSelectedCount">0</span> Selected</span>
         <div class="vr bg-secondary opacity-50 mx-1"></div>
         <button class="btn btn-sm btn-outline-primary" id="btnBulkEditModal">
             <i class="fas fa-edit"></i> Edit
+        </button>
+        <button class="btn btn-sm btn-outline-info" id="btnBulkExport3mf">
+            <i class="fas fa-cube"></i> Export .3MF
         </button>
         <button class="btn btn-sm btn-outline-success" id="btnBulkComplete">
             <i class="fas fa-check-double"></i> Mark Complete
@@ -2495,6 +2677,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         const hasSelection = selectedIds.length > 0;
         $('#btnBulkEditModal').prop('disabled', !hasSelection);
+        $('#btnBulkExport3mf').prop('disabled', !hasSelection);
         $('#btnBulkComplete').prop('disabled', !hasSelection);
         $('#btnBulkDelete').prop('disabled', !hasSelection);
         
@@ -2581,6 +2764,114 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Export selected parts as a single .3mf file
+    $('#btnBulkExport3mf').click(function() {
+        const partIds = getSelectedPartIds();
+        if (partIds.length === 0) return;
+
+        let partsWithCopies = 0;
+        let totalCopies = 0;
+        partIds.forEach(function(id) {
+            const $row = $(`.part-row[data-part-id="${id}"]`);
+            const remaining = Math.max(0, (parseInt($row.data('quantity'), 10) || 0) - (parseInt($row.data('completed'), 10) || 0));
+            if (remaining > 0) {
+                partsWithCopies += 1;
+                totalCopies += remaining;
+            }
+        });
+
+        if (totalCopies === 0) {
+            alert('The selected parts have no unprinted copies.');
+            return;
+        }
+
+        $('#export3mfPartCount').text(partsWithCopies);
+        $('#export3mfCopyCount').text(totalCopies);
+        $('#export3mfMarkComplete').prop('checked', true);
+        $('#confirmExport3mf').prop('disabled', false);
+        $('#export3mfModal').modal('show');
+    });
+
+    console.debug('[3mf-export] handler v2 loaded');
+
+    $('#confirmExport3mf').click(function() {
+        const partIds = getSelectedPartIds();
+        if (partIds.length === 0) return;
+        const markComplete = $('#export3mfMarkComplete').prop('checked');
+        const $btn = $(this).prop('disabled', true);
+
+        $.ajax({
+            url: `/project/${projectId}/export-3mf/`,
+            method: 'POST',
+            data: JSON.stringify({ part_ids: partIds, mark_complete: markComplete }),
+            contentType: 'application/json',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            responseType: 'blob',
+            timeout: 120000,
+            success: function(blob, textStatus, xhr) {
+                try {
+                    if (!(blob instanceof Blob)) {
+                        throw new Error('response was not a file');
+                    }
+                    let filename = 'parts.3mf';
+                    const disposition = xhr.getResponseHeader('Content-Disposition');
+                    if (disposition) {
+                        const match = disposition.match(/filename="([^"]+)"/);
+                        if (match) filename = match[1];
+                    }
+
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    // Revoke only after the browser has had time to start
+                    // reading the blob — revoking (or reloading) immediately
+                    // cancels the download.
+                    setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+
+                    $('#export3mfModal').modal('hide');
+                    if (markComplete) {
+                        setTimeout(function() { location.reload(); }, 2000);
+                    }
+                } catch (e) {
+                    console.error('3MF export download failed:', e);
+                    $btn.prop('disabled', false);
+                    alert('Export completed but the download could not start: ' + e.message);
+                }
+            },
+            error: function(xhr) {
+                $btn.prop('disabled', false);
+                const fallback = function() {
+                    alert('Export failed (HTTP ' + (xhr.status || 'no response') + '). Check the server console for details and try again — with a smaller selection if exporting many parts.');
+                };
+                if (xhr.response instanceof Blob) {
+                    const reader = new FileReader();
+                    reader.onload = function() {
+                        try {
+                            alert('Export failed: ' + JSON.parse(reader.result).message);
+                        } catch (e) {
+                            fallback();
+                        }
+                    };
+                    reader.onerror = fallback;
+                    reader.readAsText(xhr.response);
+                } else if (xhr.status === 0) {
+                    fallback();
+                } else {
+                    let message = null;
+                    try {
+                        message = JSON.parse(xhr.responseText).message;
+                    } catch (e) {}
+                    if (message) alert('Export failed: ' + message);
+                    else fallback();
+                }
+            }
+        });
+    });
+
     $('#btnBulkDelete').click(function() {
         const partIds = getSelectedPartIds();
         if (partIds.length === 0) return;
@@ -2604,6 +2895,210 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+    });
+
+    // Reprocess STL actions (Generate Thumbnails / Calculate Volumes)
+    function handleReprocessTask(url, btnId) {
+        const $btn = $(btnId);
+        
+        $.ajax({
+            url: url,
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            success: function(response) {
+                if (response.status === 'success' && response.task_id) {
+                    const taskId = response.task_id;
+                    const totalParts = response.total_parts || 1;
+                    
+                    // Show progress modal
+                    const progressModal = new bootstrap.Modal(document.getElementById('uploadProgressModal'));
+                    progressModal.show();
+                    
+                    // Reset modal progress bar and step statuses
+                    $('#uploadProgressBar').css('width', '0%').attr('aria-valuenow', 0);
+                    
+                    // Reset all phases
+                    ['Upload', 'Thumbnails', 'Volumes'].forEach(p => {
+                        $(`#phase${p}`).removeClass('active completed skipped');
+                    });
+                    
+                    $(`#phaseUpload`).addClass('completed');
+                    $(`#phaseUploadIcon`).html('<i class="fas fa-check"></i>');
+                    $(`#phaseUploadStatus`).text('Complete');
+                    
+                    $('#phaseThumbnailsCounter').text(`0 / ${totalParts}`);
+                    $('#phaseVolumesCounter').text(`0 / ${totalParts}`);
+                    
+                    let pollInterval = setInterval(function() {
+                        $.getJSON(`/api/upload-progress/${taskId}/`, function(data) {
+                            if (!data) return;
+                            
+                            const phase = data.phase;
+                            const completed = data.completed || 0;
+                            const total = data.total || totalParts;
+                            const percent = data.percent || 0;
+                            const skippedPhases = data.skipped_phases || [];
+                            
+                            // Update overall progress bar
+                            $('#uploadProgressBar').css('width', percent + '%').attr('aria-valuenow', percent);
+                            
+                            // Helper to set phase active / complete
+                            function setPhase(phaseName, status) {
+                                ['Upload', 'Thumbnails', 'Volumes'].forEach(p => {
+                                    $(`#phase${p}`).removeClass('active completed skipped');
+                                });
+                                
+                                const phaseOrder = ['Upload', 'Thumbnails', 'Volumes'];
+                                const idx = phaseOrder.indexOf(phaseName);
+                                
+                                for (let i = 0; i < idx; i++) {
+                                    $(`#phase${phaseOrder[i]}`).addClass('completed');
+                                    $(`#phase${phaseOrder[i]}Icon`).html('<i class="fas fa-check"></i>');
+                                }
+                                
+                                if (phaseName !== 'complete') {
+                                    $(`#phase${phaseName}`).addClass('active');
+                                    $(`#phase${phaseName}Status`).text(status);
+                                } else {
+                                    phaseOrder.forEach(p => {
+                                        $(`#phase${p}`).removeClass('active').addClass('completed');
+                                        $(`#phase${p}Icon`).html('<i class="fas fa-check"></i>');
+                                    });
+                                }
+                            }
+                            
+                            function markSkipped(phaseName, reason) {
+                                $(`#phase${phaseName}`).removeClass('active').addClass('skipped');
+                                $(`#phase${phaseName}Icon`).html('<i class="fas fa-forward"></i>');
+                                $(`#phase${phaseName}Status`).text(reason || 'Skipped');
+                            }
+                            
+                            // Handle skipped phases
+                            skippedPhases.forEach(function(s) {
+                                if (s.phase === 'thumbnails') {
+                                    markSkipped('Thumbnails', s.reason || 'Skipped');
+                                }
+                                if (s.phase === 'volumes') {
+                                    markSkipped('Volumes', s.reason || 'Skipped');
+                                }
+                            });
+                            
+                            // Update stepper
+                            if (phase === 'upload') {
+                                setPhase('Upload', data.status || 'Extracting parts from 3MF...');
+                            } else if (phase === 'thumbnails') {
+                                const isSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
+                                if (!isSkipped) {
+                                    setPhase('Thumbnails', data.status || 'Rendering...');
+                                    $('#phaseThumbnailsCounter').text(`${completed} / ${total}`);
+                                }
+                            } else if (phase === 'volumes') {
+                                const thumbSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
+                                if (thumbSkipped) {
+                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                                } else {
+                                    $(`#phaseThumbnails`).removeClass('active').addClass('completed');
+                                    $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
+                                    $(`#phaseThumbnailsStatus`).text('Complete');
+                                    $(`#phaseThumbnailsCounter`).text(`${total} / ${total}`);
+                                }
+                                setPhase('Volumes', data.status || 'Calculating...');
+                                if (thumbSkipped) {
+                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                                } else {
+                                    $(`#phaseThumbnails`).removeClass('active').addClass('completed');
+                                    $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
+                                }
+                                $('#phaseVolumesCounter').text(`${completed} / ${total}`);
+                            } else if (phase === 'complete' || data.done) {
+                                clearInterval(pollInterval);
+                                $('#uploadProgressBar').css('width', '100%').attr('aria-valuenow', 100);
+                                
+                                const thumbSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
+                                const volSkipped = skippedPhases.some(s => s.phase === 'volumes');
+                                
+                                $(`#phaseUpload`).removeClass('active').addClass('completed');
+                                $(`#phaseUploadIcon`).html('<i class="fas fa-check"></i>');
+                                
+                                if (thumbSkipped) {
+                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                                } else {
+                                    $(`#phaseThumbnails`).removeClass('active skipped').addClass('completed');
+                                    $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
+                                    $(`#phaseThumbnailsStatus`).text('Complete');
+                                    $(`#phaseThumbnailsCounter`).text(`${total} / ${total}`);
+                                }
+                                
+                                if (volSkipped) {
+                                    markSkipped('Volumes', skippedPhases.find(s => s.phase === 'volumes').reason);
+                                } else {
+                                    $(`#phaseVolumes`).removeClass('active skipped').addClass('completed');
+                                    $(`#phaseVolumesIcon`).html('<i class="fas fa-check"></i>');
+                                    $(`#phaseVolumesStatus`).text('Complete');
+                                    $(`#phaseVolumesCounter`).text(`${total} / ${total}`);
+                                }
+                                
+                                setTimeout(function() {
+                                    location.reload();
+                                }, 1000);
+                            }
+                        });
+                    }, 500);
+                } else {
+                    alert(response.message || 'Operation failed to start');
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Error starting process';
+                alert(errorMsg);
+            }
+        });
+    }
+
+    $('#projectGenerateThumbnails').click(function(e) {
+        e.preventDefault();
+        handleReprocessTask(`/project/${projectId}/generate-thumbnails/`, '#projectGenerateThumbnails');
+    });
+
+    $('#projectCalculateVolumes').click(function(e) {
+        e.preventDefault();
+        handleReprocessTask(`/project/${projectId}/calculate-volumes/`, '#projectCalculateVolumes');
+    });
+
+    $('#projectApplySmartParsing').click(function(e) {
+        e.preventDefault();
+        if (!confirm('Apply smart parsing to all parts in this project?\n\nQuantities will be read from part/file names (only for parts whose quantity is 1), and missing Left/Right counterparts will be created.')) {
+            return;
+        }
+
+        $.ajax({
+            url: `/project/${projectId}/apply-smart-parsing/`,
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            success: function(response) {
+                if (response.status === 'success') {
+                    let details = response.message;
+                    const extras = [];
+                    if (response.quantities_updated && response.quantities_updated.length) {
+                        extras.push('Quantities: ' + response.quantities_updated.join(', '));
+                    }
+                    if (response.mirrors_created && response.mirrors_created.length) {
+                        extras.push('Mirror parts: ' + response.mirrors_created.join(', '));
+                    }
+                    if (extras.length) {
+                        details += '\n\n' + extras.join('\n');
+                    }
+                    alert(details);
+                    location.reload();
+                } else {
+                    alert(response.message || 'Smart parsing failed');
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Error applying smart parsing';
+                alert(errorMsg);
+            }
+        });
     });
 
 });

@@ -47,6 +47,11 @@ class Project(models.Model):
     designer = models.ForeignKey(Designer, on_delete=models.SET_NULL, null=True, blank=True, related_name='projects')
     tags = models.ManyToManyField(Tag, blank=True, related_name='projects')
     source = models.URLField(max_length=500, blank=True, help_text="Link to where the project files were sourced from")
+    default_material = models.ForeignKey(
+        'Material', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='default_for_projects',
+        help_text="Material pre-selected for new parts and used as a fallback on import"
+    )
 
     @property
     def total_parts(self):

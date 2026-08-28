@@ -1,5 +1,5 @@
 {% extends 'projects/base.html' %}
-{% load crispy_forms_tags %}
+{% load static crispy_forms_tags %}
 
 {% block title %}Add Parts - {{ project.name }}{% endblock %}
 
@@ -248,15 +248,21 @@
             let brandStr = m.brand ? m.brand + ' - ' : '';
             return brandStr + m.name + ' (' + m.type_display + ')';
         }
+
+        // Project default material — pre-selected in new rows
+        const DEFAULT_MATERIAL_ID = {% if project.default_material %}"{{ project.default_material.id }}"{% else %}null{% endif %};
+
+        // User setting: parse quantity + mirror info from file names on upload
+        const AUTO_NAME_PARSING = {{ auto_name_parsing|yesno:"true,false" }};
     </script>
 
     <div class="card premium-card border-0 mb-4 shadow-sm no-hover" style="border-radius: 12px;">
         <div class="card-body">
             <div class="upload-area" id="uploadArea">
                 <i class="fas fa-cloud-upload-alt fa-3x mb-3 text-primary"></i>
-                <h5>Drag and drop 3D files here</h5>
+                <h5>Drag and drop 3D files or a ZIP here</h5>
                 <p class="text-muted">or click to browse</p>
-                <input type="file" id="fileInput" multiple accept=".stl,.obj,.3mf" style="display: none;">
+                <input type="file" id="fileInput" multiple accept=".stl,.obj,.3mf,.zip" style="display: none;">
             </div>
         </div>
     </div>
@@ -296,6 +302,7 @@
                             <th style="width: 40px;"><i class="fas fa-check"></i></th>
                             <th style="width: 250px;">Name</th>
                             <th style="width: 100px;">Quantity</th>
+                            <th style="width: 60px;" title="Create mirrored Left/Right pair"><i class="fas fa-left-right"></i></th>
                             <th style="width: 250px;">Material</th>
                             <th style="width: 150px;">Group</th>
                         </tr>
@@ -363,6 +370,12 @@
                         <div class="phase-counter text-end" id="phaseVolumesCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
                     </div>
                 </div>
+            </div>
+            <div class="modal-footer border-top border-dark d-flex align-items-center gap-2 py-3">
+                <small class="text-danger flex-grow-1" id="uploadErrorText"></small>
+                <button type="button" class="btn btn-primary btn-sm d-none" id="resumeUploadBtn">
+                    <i class="fas fa-redo me-1"></i>Resume Upload
+                </button>
             </div>
         </div>
     </div>
@@ -482,6 +495,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'projects/js/fflate.min.js' %}"></script>
 <script>
 $(document).ready(function() {
     const $uploadArea = $('#uploadArea');
@@ -519,14 +533,115 @@ $(document).ready(function() {
         handleFiles(e.originalEvent.dataTransfer.files);
     });
     
+    // ─── Smart import: parse quantity + Left/Right side from file names ───
+    // Mirrors projects/smart_import.py — keep both in sync.
+    const QUANTITY_PATTERNS = [
+        /^(?<name>.*?)[ _\-]x(?<qty>\d+)$/i,
+        /^(?<name>.*?)[ _\-](?<qty>\d+)x$/i,
+        /^(?<name>.*?)[ _\-](?<qty>\d+)\s*(?:pcs?|pieces?)$/i
+    ];
+
+    function parseQuantityFromName(name) {
+        const stripped = (name || '').trim();
+        // Ignore a trailing (Left)/(Right) marker and any 'mirror' token while
+        // matching, so 'earcup mirror x2 (Left)' parses; reattach the side after.
+        const sideMatch = stripped.match(SIDE_RE);
+        const core = stripMirrorToken(sideMatch ? stripped.slice(0, sideMatch.index).trim() : stripped);
+        for (const pattern of QUANTITY_PATTERNS) {
+            const match = core.match(pattern);
+            if (match) {
+                const cleaned = match.groups.name.trim();
+                const quantity = parseInt(match.groups.qty, 10);
+                if (!cleaned || quantity < 1) return { name: stripped, quantity: 1 };
+                const suffix = sideMatch ? ` (${sideMatch[1]})` : '';
+                return { name: cleaned + suffix, quantity: quantity };
+            }
+        }
+        return { name: stripped, quantity: 1 };
+    }
+
+    const SIDE_RE = /\s*\((left|right)\)\s*$/i;
+    const MIRROR_RE = /(?:^|[\s_-])mirror(?:$|[\s_-])/i;
+
+    function stripMirrorToken(name) {
+        if (!name) return name;
+        const cleaned = name.replace(MIRROR_RE, ' ');
+        return cleaned.replace(/\s+/g, ' ').trim().replace(/^[\s_-]+|[\s_-]+$/g, '');
+    }
+
+    function isMirrorIndicator(name) {
+        if (!name) return false;
+        const stripped = stripMirrorToken(name);
+        return stripped !== name.trim() || SIDE_RE.test(name);
+    }
+
+    function mirrorCounterpartName(name) {
+        const stripped = (name || '').trim();
+        const match = stripped.match(SIDE_RE);
+        if (match) {
+            const base = stripped.slice(0, match.index).trim();
+            const opposite = match[1].toLowerCase() === 'left' ? 'Right' : 'Left';
+            return `${base} (${opposite})`;
+        }
+        return `${stripped} (Left)`;
+    }
+
     // Function to handle uploaded files
+    const SUPPORTED_3D_EXTS = ['stl', 'obj', '3mf'];
+
     function handleFiles(files) {
         Array.from(files).forEach(file => {
             const ext = file.name.toLowerCase().split('.').pop();
-            if (['stl', 'obj', '3mf'].includes(ext)) {
+            if (ext === 'zip') {
+                extractZipFile(file);
+            } else if (SUPPORTED_3D_EXTS.includes(ext)) {
                 addRowFromFile(file);
             }
         });
+    }
+
+    // Read a File's bytes as an ArrayBuffer (works across all browsers).
+    function readFileAsArrayBuffer(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Could not read file'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    // Extract a dropped ZIP client-side and turn each 3D entry into a row.
+    // Entry folder paths are stripped; nested zips count as unsupported.
+    async function extractZipFile(zipFile) {
+        if (typeof fflate === 'undefined') {
+            alert('ZIP support failed to load on this page. Reload the page and try again.');
+            return;
+        }
+        let entries;
+        try {
+            const bytes = await readFileAsArrayBuffer(zipFile);
+            // fflate's async API is callback-only (no Promise), so wrap it.
+            entries = await new Promise((resolve, reject) => {
+                fflate.unzip(new Uint8Array(bytes), (err, unzipped) => err ? reject(err) : resolve(unzipped));
+            });
+        } catch (err) {
+            console.error('ZIP extraction failed:', err);
+            const detail = (err && err.message) ? err.message : String(err);
+            alert(`Could not read "${zipFile.name}": ${detail}`);
+            return;
+        }
+        let added = 0;
+        Object.entries(entries).forEach(([entryName, data]) => {
+            if (entryName.endsWith('/')) return;
+            const base = entryName.split('/').pop();
+            const ext = base.toLowerCase().split('.').pop();
+            if (!SUPPORTED_3D_EXTS.includes(ext)) return;
+            addRowFromFile(new File([data], base, { type: 'application/octet-stream' }));
+            added++;
+        });
+        if (added === 0) {
+            alert(`No 3D files (stl/obj/3mf) found in "${zipFile.name}".`);
+        }
     }
     
     // Function to add a new row from a file
@@ -542,6 +657,9 @@ $(document).ready(function() {
             </td>
             <td class="editable-cell">
                 <input type="number" class="editable-input" name="quantity" value="1" min="1">
+            </td>
+            <td class="text-center">
+                <input type="checkbox" class="mirror-toggle" name="mirror" title="Create mirrored Left/Right pair (shares this file)">
             </td>
             <td class="editable-cell" style="position: relative;">
                 <div class="dropdown w-100 h-100">
@@ -579,15 +697,62 @@ $(document).ready(function() {
             </td>
         `);
         
-        // Set the filename as the part name (without extension)
+        // Smart import: derive name + quantity from the file name (when enabled)
         const fileName = file.name.replace(/\.(stl|obj|3mf)$/i, '');
-        $newRow.find('[name="name"]').val(fileName);
-        
+        let name;
+        if (AUTO_NAME_PARSING) {
+            const parsedName = parseQuantityFromName(fileName);
+            name = stripMirrorToken(parsedName.name);
+            $newRow.find('[name="quantity"]').val(parsedName.quantity);
+        } else {
+            name = fileName;
+        }
+        $newRow.find('[name="name"]').val(name);
+
+        // Pre-select the project's default material (still overridable per row)
+        if (DEFAULT_MATERIAL_ID) {
+            const defaultMaterial = materialsData.find(m => m.id === DEFAULT_MATERIAL_ID);
+            if (defaultMaterial) {
+                updateMaterialDropdownUI($newRow, defaultMaterial.id, defaultMaterial.color, getMaterialDisplay(defaultMaterial));
+            }
+        }
+
+        // Smart import: auto-enable the mirror pair toggle when the file name
+        // carries a (Left)/(Right) marker or a MIRROR token and no counterpart row exists yet.
+        // The side marker is tested on the parsed name; the mirror token on the raw
+        // name, since parsing may have already stripped it.
+        if (AUTO_NAME_PARSING && (SIDE_RE.test(name) || stripMirrorToken(fileName) !== fileName.trim())) {
+            const counterpartName = mirrorCounterpartName(name);
+            let hasCounterpart = false;
+            $table.find('tbody tr').each(function() {
+                if ($(this).find('[name="name"]').val().trim() === counterpartName) {
+                    hasCounterpart = true;
+                }
+            });
+            if (!hasCounterpart) {
+                $newRow.data('autoMirror', true);
+                $newRow.find('.mirror-toggle').prop('checked', true);
+            }
+        }
+
         // Add file data attribute
         $newRow.data('file', file);
-        
+
         $table.find('tbody').append($newRow);
         rowCount++;
+
+        // If this row provides a counterpart for an earlier auto-checked row,
+        // both files are real parts now — disable that row's mirror toggle
+        $table.find('tbody tr').each(function() {
+            const $other = $(this);
+            if ($other.attr('data-id') === $newRow.attr('data-id')) return;
+            const $toggle = $other.find('.mirror-toggle');
+            if (!$other.data('autoMirror') || !$toggle.prop('checked')) return;
+            const otherName = $other.find('[name="name"]').val().trim();
+            if (SIDE_RE.test(otherName) && mirrorCounterpartName(otherName) === name) {
+                $toggle.prop('checked', false);
+            }
+        });
     }
 
     // Helper to update material dropdown UI
@@ -701,28 +866,255 @@ $(document).ready(function() {
     });
 
 
+    // ─── Two-phase upload state & helpers ───────────────────
+    let uploadState = null;      // {taskId, pipelineTotal, fileRows, uploadedRows, chunkQueue, skipInstructions}
+    let pollInterval = null;
+    const CHUNK_MAX_FILES = 10;
+    const CHUNK_MAX_BYTES = 256 * 1024 * 1024;
+
+    function stopPolling() {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    function goToDestination(skipInstructions) {
+        window.location.href = skipInstructions
+            ? '{% url "projects:project_detail" project.pk %}'
+            : '{% url "projects:upload_instructions" project.pk %}';
+    }
+
+    // Phase stepper helpers
+    function setPhase(phaseName, status) {
+        ['Upload', 'Thumbnails', 'Volumes'].forEach(p => {
+            $(`#phase${p}`).removeClass('active completed skipped');
+        });
+
+        const phaseOrder = ['Upload', 'Thumbnails', 'Volumes'];
+        const idx = phaseOrder.indexOf(phaseName);
+
+        for (let i = 0; i < idx; i++) {
+            $(`#phase${phaseOrder[i]}`).addClass('completed');
+            $(`#phase${phaseOrder[i]}Icon`).html('<i class="fas fa-check"></i>');
+        }
+
+        if (phaseName !== 'complete') {
+            $(`#phase${phaseName}`).addClass('active');
+            $(`#phase${phaseName}Status`).text(status);
+        } else {
+            phaseOrder.forEach(p => {
+                $(`#phase${p}`).removeClass('active').addClass('completed');
+                $(`#phase${p}Icon`).html('<i class="fas fa-check"></i>');
+            });
+        }
+    }
+
+    function markSkipped(phaseName, reason) {
+        $(`#phase${phaseName}`).removeClass('active').addClass('skipped');
+        $(`#phase${phaseName}Icon`).html('<i class="fas fa-forward"></i>');
+        $(`#phase${phaseName}Status`).text(reason || 'Skipped');
+    }
+
+    function showUploadError(message) {
+        stopPolling();
+        $('#uploadErrorText').text(message).removeClass('d-none');
+        $('#resumeUploadBtn').prop('disabled', false).removeClass('d-none');
+        if ($('#phaseUpload').hasClass('active')) {
+            $('#phaseUploadStatus').text('Paused — click Resume Upload');
+        }
+    }
+
+    function hideUploadError() {
+        $('#uploadErrorText').text('').addClass('d-none');
+        $('#resumeUploadBtn').prop('disabled', true).addClass('d-none');
+    }
+
+    function sendChunk(chunk) {
+        return new Promise(function(resolve, reject) {
+            const formData = new FormData();
+            chunk.forEach(item => formData.append('files', item.file));
+            formData.append('assignments', JSON.stringify(chunk.map(item => ({ part_ids: item.partIds }))));
+            formData.append('task_id', uploadState.taskId || '');
+            formData.append('uploaded_rows', String(uploadState.uploadedRows + chunk.length));
+            formData.append('file_rows', String(uploadState.fileRows));
+
+            $.ajax({
+                url: '{% url "projects:parts_upload" project.pk %}',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRFToken': $('input[name="csrfmiddlewaretoken"]').val() },
+                xhr: function() {
+                    const xhr = new window.XMLHttpRequest();
+                    xhr.upload.addEventListener('progress', function(e) {
+                        if (e.lengthComputable && uploadState.fileRows > 0) {
+                            const donePct = uploadState.uploadedRows / uploadState.fileRows;
+                            const barPct = Math.round((donePct + (e.loaded / e.total) / uploadState.fileRows) * 33);
+                            $('#uploadProgressBar').css('width', barPct + '%').attr('aria-valuenow', barPct);
+                        }
+                    }, false);
+                    return xhr;
+                },
+                success: function(response) {
+                    if (response.status === 'success') {
+                        uploadState.uploadedRows += chunk.length;
+                        $('#phaseUploadCounter').text(`${uploadState.uploadedRows} / ${uploadState.fileRows}`);
+                        resolve();
+                    } else {
+                        reject(new Error(response.message || 'Upload failed'));
+                    }
+                },
+                error: function(xhr) {
+                    let msg = `Chunk upload failed (HTTP ${xhr.status})`;
+                    try {
+                        const r = JSON.parse(xhr.responseText);
+                        if (r && r.message) msg = r.message;
+                    } catch (e) {}
+                    reject(new Error(msg));
+                }
+            });
+        });
+    }
+
+    function sendRemainingChunks() {
+        if (!uploadState.chunkQueue.length) { onAllChunksDone(); return; }
+        const chunk = uploadState.chunkQueue.shift();
+        $('#phaseUploadStatus').text(`Uploading file ${uploadState.uploadedRows + 1} of ${uploadState.fileRows}...`);
+        sendChunk(chunk).then(function() {
+            sendRemainingChunks();
+        }).catch(function(err) {
+            uploadState.chunkQueue.unshift(chunk);
+            showUploadError(err.message);
+        });
+    }
+
+    function onAllChunksDone() {
+        $('#uploadProgressBar').css('width', '33%').attr('aria-valuenow', 33);
+        $('#phaseUploadCounter').text(`${uploadState.fileRows} / ${uploadState.fileRows}`);
+        setPhase('Upload', 'Complete');
+        $('#phaseUpload').removeClass('active').addClass('completed');
+        $('#phaseUploadIcon').html('<i class="fas fa-check"></i>');
+
+        const taskId = uploadState.taskId;
+        const totalParts = uploadState.pipelineTotal || uploadState.fileRows;
+
+        if (!taskId) {
+            goToDestination(uploadState.skipInstructions);
+            return;
+        }
+
+        setPhase('Thumbnails', 'Starting...');
+        $('#phaseThumbnailsCounter').text(`0 / ${totalParts}`);
+        $('#phaseVolumesCounter').text(`0 / ${totalParts}`);
+
+        pollInterval = setInterval(function() {
+            $.getJSON(`/api/upload-progress/${taskId}/`, function(data) {
+                if (!data) return;
+
+                const phase = data.phase;
+                const completed = data.completed || 0;
+                const total = data.total || totalParts;
+                const percent = data.percent || 0;
+                const skippedPhases = data.skipped_phases || [];
+
+                // Update overall progress bar
+                $('#uploadProgressBar').css('width', percent + '%').attr('aria-valuenow', percent);
+
+                // Handle skipped phases
+                skippedPhases.forEach(function(s) {
+                    if (s.phase === 'thumbnails') {
+                        markSkipped('Thumbnails', s.reason || 'Skipped');
+                    }
+                });
+
+                // Update phase stepper based on current phase
+                if (phase === 'upload') {
+                    setPhase('Upload', data.status || 'Processing files...');
+                } else if (phase === 'thumbnails') {
+                    const isSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
+                    if (!isSkipped) {
+                        setPhase('Thumbnails', data.status || 'Rendering...');
+                        $('#phaseThumbnailsCounter').text(`${completed} / ${total}`);
+                    }
+                } else if (phase === 'volumes') {
+                    const thumbSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
+                    if (thumbSkipped) {
+                        markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                    } else {
+                        $(`#phaseThumbnails`).removeClass('active').addClass('completed');
+                        $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
+                        $(`#phaseThumbnailsStatus`).text('Complete');
+                        $(`#phaseThumbnailsCounter`).text(`${total} / ${total}`);
+                    }
+                    setPhase('Volumes', data.status || 'Calculating...');
+                    if (thumbSkipped) {
+                        markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                    } else {
+                        $(`#phaseThumbnails`).removeClass('active').addClass('completed');
+                        $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
+                    }
+                    $('#phaseVolumesCounter').text(`${completed} / ${total}`);
+                } else if (phase === 'complete' || data.done) {
+                    clearInterval(pollInterval);
+
+                    $('#uploadProgressBar').css('width', '100%').attr('aria-valuenow', 100);
+
+                    const thumbSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
+                    $(`#phaseUpload`).removeClass('active').addClass('completed');
+                    $(`#phaseUploadIcon`).html('<i class="fas fa-check"></i>');
+                    $(`#phaseUploadStatus`).text('Complete');
+
+                    if (thumbSkipped) {
+                        markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                    } else {
+                        $(`#phaseThumbnails`).removeClass('active skipped').addClass('completed');
+                        $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
+                        $(`#phaseThumbnailsStatus`).text('Complete');
+                        $(`#phaseThumbnailsCounter`).text(`${total} / ${total}`);
+                    }
+
+                    $(`#phaseVolumes`).removeClass('active').addClass('completed');
+                    $(`#phaseVolumesIcon`).html('<i class="fas fa-check"></i>');
+                    $(`#phaseVolumesStatus`).text('Complete');
+                    $(`#phaseVolumesCounter`).text(`${total} / ${total}`);
+
+                    setTimeout(function() {
+                        goToDestination(uploadState.skipInstructions);
+                    }, 800);
+                }
+            });
+        }, 500);
+
+        // Safety timeout: 15 minutes max (pipeline keeps running server-side)
+        setTimeout(function() {
+            if (pollInterval) goToDestination(uploadState.skipInstructions);
+        }, 900000);
+    }
+
+    $('#resumeUploadBtn').on('click', function() {
+        if (!uploadState || !uploadState.chunkQueue.length) return;
+        hideUploadError();
+        $(this).prop('disabled', true);
+        sendRemainingChunks();
+    });
+
     // Save all parts
     $('#saveAll, #saveAndSkip').click(function() {
+        const $btn = $(this);
         const skipInstructions = $(this).attr('id') === 'saveAndSkip';
-        const formData = new FormData();
+        const originalHtml = $btn.html();
         const parts = [];
-        let totalSize = 0;
-        
+
         $table.find('tbody tr').each(function() {
             const $row = $(this);
             const file = $row.data('file');
-            
-            if (file) {
-                formData.append('files', file);
-                totalSize += file.size;
-            }
-            
+
             const partData = {
                 name: $row.find('[name="name"]').val(),
                 quantity: parseInt($row.find('[name="quantity"]').val()),
                 material: $row.find('[name="material"]').val(),
                 color: $row.find('[name="color"]').val(),
-                group: $row.find('[name="group"]').val()
+                group: $row.find('[name="group"]').val(),
+                has_file: !!file
             };
 
             // Validate required fields
@@ -739,6 +1131,19 @@ $(document).ready(function() {
                 return false;
             }
 
+            // Smart import: mirror pair — replicates copy_mirror_part naming
+            if ($row.find('.mirror-toggle').prop('checked')) {
+                let nameVal = partData.name.trim();
+                nameVal = stripMirrorToken(nameVal);
+                if (SIDE_RE.test(nameVal)) {
+                    partData.mirror_name = mirrorCounterpartName(nameVal);
+                } else {
+                    partData.name = `${nameVal} (Right)`;
+                    partData.mirror_name = `${nameVal} (Left)`;
+                }
+                partData.mirror = true;
+            }
+
             parts.push(partData);
         });
 
@@ -747,221 +1152,68 @@ $(document).ready(function() {
             return false;
         }
 
-        formData.append('parts', JSON.stringify(parts));
-
-        // Show loading state
-        const $btn = $(this);
-        const originalHtml = $btn.html();
         $btn.html('<i class="fas fa-spinner fa-spin"></i> Saving...').prop('disabled', true);
-
-        const fileCount = $table.find('tbody tr').length;
-        let pollInterval = null;
-
-        // ─── Phase stepper helpers ──────────────────────────
-        function setPhase(phaseName, status) {
-            // Reset all phases
-            ['Upload', 'Thumbnails', 'Volumes'].forEach(p => {
-                $(`#phase${p}`).removeClass('active completed skipped');
-                $(`#phase${p}Icon`).html($(`#phase${p}Icon`).html()); // keep original icon
-            });
-
-            const phaseOrder = ['Upload', 'Thumbnails', 'Volumes'];
-            const idx = phaseOrder.indexOf(phaseName);
-
-            // Mark previous phases as completed
-            for (let i = 0; i < idx; i++) {
-                $(`#phase${phaseOrder[i]}`).addClass('completed');
-                $(`#phase${phaseOrder[i]}Icon`).html('<i class="fas fa-check"></i>');
-            }
-
-            // Mark current phase as active
-            if (phaseName !== 'complete') {
-                $(`#phase${phaseName}`).addClass('active');
-                $(`#phase${phaseName}Status`).text(status);
-            } else {
-                // All complete
-                phaseOrder.forEach(p => {
-                    $(`#phase${p}`).removeClass('active').addClass('completed');
-                    $(`#phase${p}Icon`).html('<i class="fas fa-check"></i>');
-                });
-            }
-        }
-
-        function markSkipped(phaseName, reason) {
-            $(`#phase${phaseName}`).removeClass('active').addClass('skipped');
-            $(`#phase${phaseName}Icon`).html('<i class="fas fa-forward"></i>');
-            $(`#phase${phaseName}Status`).text(reason || 'Skipped');
-        }
-
-        // ─── Show modal & start upload ─────────────────────
+        hideUploadError();
         const progressModal = new bootstrap.Modal(document.getElementById('uploadProgressModal'));
         progressModal.show();
 
-        // Initialize phases
-        setPhase('Upload', `Uploading ${fileCount} file${fileCount !== 1 ? 's' : ''}...`);
-        $('#uploadProgressBar').css('width', '2%').attr('aria-valuenow', 2);
-        $('#phaseUploadCounter').text(`0 / ${fileCount}`);
-
-        // ─── AJAX with XHR progress for Phase 1 ────────────
+        // ─── Phase 1: create part rows (metadata only, no files) ──
         $.ajax({
-            url: '{% url "projects:add_multiple_parts" project.pk %}',
+            url: '{% url "projects:parts_create" project.pk %}',
             type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            headers: {
-                'X-CSRFToken': $('input[name="csrfmiddlewaretoken"]').val()
-            },
-            xhr: function() {
-                const xhr = new window.XMLHttpRequest();
-                xhr.upload.addEventListener('progress', function(e) {
-                    if (e.lengthComputable) {
-                        // Map upload bytes to 0-33% range
-                        const pct = (e.loaded / e.total);
-                        const barPct = Math.round(pct * 33);
-                        $('#uploadProgressBar').css('width', barPct + '%').attr('aria-valuenow', barPct);
-                        
-                        // Estimate "files uploaded" from byte progress
-                        const filesEstimate = Math.min(fileCount, Math.ceil(pct * fileCount));
-                        $('#phaseUploadCounter').text(`${filesEstimate} / ${fileCount}`);
-                        $('#phaseUploadStatus').text(`Uploading ${fileCount} file${fileCount !== 1 ? 's' : ''}...`);
-                    }
-                }, false);
-                return xhr;
-            },
+            data: { parts: JSON.stringify(parts) },
+            headers: { 'X-CSRFToken': $('input[name="csrfmiddlewaretoken"]').val() },
             success: function(response) {
-                if (response.status === 'success') {
-                    // Phase 1 complete
-                    $('#uploadProgressBar').css('width', '33%').attr('aria-valuenow', 33);
-                    $('#phaseUploadCounter').text(`${fileCount} / ${fileCount}`);
-                    setPhase('Upload', 'Complete');
-                    $(`#phaseUpload`).removeClass('active').addClass('completed');
-                    $(`#phaseUploadIcon`).html('<i class="fas fa-check"></i>');
-
-                    const taskId = response.task_id;
-                    const totalParts = response.total_parts || fileCount;
-
-                    if (!taskId) {
-                        // No background processing needed (no files)
-                        progressModal.hide();
-                        window.location.href = skipInstructions 
-                            ? '{% url "projects:project_detail" project.pk %}' 
-                            : '{% url "projects:upload_instructions" project.pk %}';
-                        return;
-                    }
-
-                    // ─── Start polling for Phase 2 & 3 ─────────
-                    setPhase('Thumbnails', 'Starting...');
-                    $('#phaseThumbnailsCounter').text(`0 / ${totalParts}`);
-                    $('#phaseVolumesCounter').text(`0 / ${totalParts}`);
-
-                    pollInterval = setInterval(function() {
-                        $.getJSON(`/api/upload-progress/${taskId}/`, function(data) {
-                            if (!data) return;
-
-                            const phase = data.phase;
-                            const completed = data.completed || 0;
-                            const total = data.total || totalParts;
-                            const percent = data.percent || 0;
-                            const skippedPhases = data.skipped_phases || [];
-
-                            // Update overall progress bar
-                            $('#uploadProgressBar').css('width', percent + '%').attr('aria-valuenow', percent);
-
-                            // Handle skipped phases
-                            skippedPhases.forEach(function(s) {
-                                if (s.phase === 'thumbnails') {
-                                    markSkipped('Thumbnails', s.reason || 'Skipped');
-                                }
-                            });
-
-                            // Update phase stepper based on current phase
-                            if (phase === 'thumbnails') {
-                                const isSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
-                                if (!isSkipped) {
-                                    setPhase('Thumbnails', data.status || 'Rendering...');
-                                    $('#phaseThumbnailsCounter').text(`${completed} / ${total}`);
-                                }
-                            } else if (phase === 'volumes') {
-                                // Thumbnails phase is done (or was skipped)
-                                const thumbSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
-                                if (thumbSkipped) {
-                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
-                                } else {
-                                    $(`#phaseThumbnails`).removeClass('active').addClass('completed');
-                                    $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
-                                    $(`#phaseThumbnailsStatus`).text('Complete');
-                                    $(`#phaseThumbnailsCounter`).text(`${total} / ${total}`);
-                                }
-                                setPhase('Volumes', data.status || 'Calculating...');
-                                // Re-mark thumbnails since setPhase resets
-                                if (thumbSkipped) {
-                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
-                                } else {
-                                    $(`#phaseThumbnails`).removeClass('active').addClass('completed');
-                                    $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
-                                }
-                                $('#phaseVolumesCounter').text(`${completed} / ${total}`);
-                            } else if (phase === 'complete' || data.done) {
-                                // All done!
-                                clearInterval(pollInterval);
-                                
-                                $('#uploadProgressBar').css('width', '100%').attr('aria-valuenow', 100);
-                                
-                                // Mark all phases
-                                const thumbSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
-                                $(`#phaseUpload`).removeClass('active').addClass('completed');
-                                $(`#phaseUploadIcon`).html('<i class="fas fa-check"></i>');
-                                $(`#phaseUploadStatus`).text('Complete');
-                                
-                                if (thumbSkipped) {
-                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
-                                } else {
-                                    $(`#phaseThumbnails`).removeClass('active skipped').addClass('completed');
-                                    $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
-                                    $(`#phaseThumbnailsStatus`).text('Complete');
-                                    $(`#phaseThumbnailsCounter`).text(`${total} / ${total}`);
-                                }
-                                
-                                $(`#phaseVolumes`).removeClass('active').addClass('completed');
-                                $(`#phaseVolumesIcon`).html('<i class="fas fa-check"></i>');
-                                $(`#phaseVolumesStatus`).text('Complete');
-                                $(`#phaseVolumesCounter`).text(`${total} / ${total}`);
-                                
-                                setTimeout(function() {
-                                    window.location.href = skipInstructions 
-                                        ? '{% url "projects:project_detail" project.pk %}' 
-                                        : '{% url "projects:upload_instructions" project.pk %}';
-                                }, 800);
-                            }
-                        });
-                    }, 500);
-
-                    // Safety timeout: 5 minutes max
-                    setTimeout(function() {
-                        if (pollInterval) {
-                            clearInterval(pollInterval);
-                            window.location.href = skipInstructions 
-                                ? '{% url "projects:project_detail" project.pk %}' 
-                                : '{% url "projects:upload_instructions" project.pk %}';
-                        }
-                    }, 300000);
-
-                } else {
+                if (response.status !== 'success') {
                     progressModal.hide();
-                    alert('Error: ' + (response.message || 'Unknown error occurred'));
+                    alert('Error saving parts: ' + (response.message || 'Unknown error'));
                     $btn.html(originalHtml).prop('disabled', false);
+                    return;
                 }
+
+                uploadState = {
+                    taskId: response.task_id,
+                    pipelineTotal: response.pipeline_total,
+                    fileRows: 0,
+                    uploadedRows: 0,
+                    chunkQueue: [],
+                    skipInstructions: skipInstructions
+                };
+
+                // Build chunks from rows that carry a file (≤10 files / ≤256MB each)
+                let chunk = [];
+                let chunkBytes = 0;
+                $table.find('tbody tr').each(function(idx) {
+                    const row = response.rows[idx];
+                    if (!row || !row.has_file) return;
+                    const file = $(this).data('file');
+                    if (!file) return;
+                    if (chunk.length && (chunk.length >= CHUNK_MAX_FILES || chunkBytes + file.size > CHUNK_MAX_BYTES)) {
+                        uploadState.chunkQueue.push(chunk);
+                        chunk = [];
+                        chunkBytes = 0;
+                    }
+                    chunk.push({ file: file, partIds: row.part_ids });
+                    chunkBytes += file.size;
+                });
+                if (chunk.length) uploadState.chunkQueue.push(chunk);
+
+                uploadState.fileRows = response.rows.filter(r => r.has_file).length;
+                const fileCount = uploadState.fileRows;
+
+                setPhase('Upload', `Uploading ${fileCount} file${fileCount !== 1 ? 's' : ''}...`);
+                $('#uploadProgressBar').css('width', '2%').attr('aria-valuenow', 2);
+                $('#phaseUploadCounter').text(`0 / ${fileCount}`);
+
+                if (fileCount === 0) { onAllChunksDone(); return; }
+                sendRemainingChunks();
             },
             error: function(xhr) {
                 progressModal.hide();
-                if (pollInterval) clearInterval(pollInterval);
                 let errorMessage = 'Error saving parts. Please try again.';
                 try {
                     const response = JSON.parse(xhr.responseText);
-                    if (response.message) {
-                        errorMessage = response.message;
-                    }
+                    if (response && response.message) errorMessage = response.message;
                 } catch (e) {}
                 alert(errorMessage);
                 $btn.html(originalHtml).prop('disabled', false);
