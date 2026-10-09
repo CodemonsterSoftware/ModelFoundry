@@ -47,10 +47,15 @@ def create_task(task_id, total_parts):
             'enqueued': set(),
             'uploads_done': threading.Event(),
             'consumer_started': False,
+            # Generic tasks (e.g. project import) drive their own percent and
+            # report a terminal error / redirect target:
+            'percent_override': None,
+            'error': None,
+            'redirect_url': None,
         }
 
 
-def update_task(task_id, phase=None, completed=None, status=None, total=None):
+def update_task(task_id, phase=None, completed=None, status=None, total=None, percent=None):
     """Update progress for a task."""
     with _lock:
         task = _tasks.get(task_id)
@@ -64,6 +69,8 @@ def update_task(task_id, phase=None, completed=None, status=None, total=None):
             task['status'] = status
         if total is not None:
             task['total'] = total
+        if percent is not None:
+            task['percent_override'] = percent
         task['last_activity'] = time.time()
 
 
@@ -163,6 +170,20 @@ def complete_task(task_id):
             task['status'] = 'Complete!'
 
 
+def finish(task_id, success=True, error=None, redirect_url=None):
+    """Mark a generic task done, optionally with an error or redirect target."""
+    with _lock:
+        task = _tasks.get(task_id)
+        if not task:
+            return
+        task['done'] = True
+        task['phase'] = 'complete'
+        task['percent_override'] = 100 if success else task.get('percent_override')
+        task['status'] = 'Complete!' if success else 'Failed'
+        task['error'] = error
+        task['redirect_url'] = redirect_url
+
+
 def get_task(task_id):
     """Get current progress for a task. Returns None if not found."""
     with _lock:
@@ -176,7 +197,11 @@ def get_task(task_id):
         phase = task['phase']
         skipped = [s['phase'] for s in task.get('skipped_phases', [])]
 
-        if phase == 'complete' or task['done']:
+        if task.get('percent_override') is not None:
+            percent = int(task['percent_override'])
+        elif task['done'] and task.get('error'):
+            percent = 0
+        elif phase == 'complete' or task['done']:
             percent = 100
         elif phase == 'upload':
             # 0-33% — driven by items appended so far (chunked uploads),
@@ -200,6 +225,8 @@ def get_task(task_id):
             'status': task['status'],
             'done': task['done'],
             'skipped_phases': task.get('skipped_phases', []),
+            'error': task.get('error'),
+            'redirect_url': task.get('redirect_url'),
         }
 
 

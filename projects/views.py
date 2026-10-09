@@ -12,7 +12,7 @@ from django.http import JsonResponse, HttpResponse, HttpResponseForbidden
 from django.http.multipartparser import MultiPartParserError
 from django.views.decorators.csrf import csrf_exempt
 import re
-from .models import Project, Part, Group, PurchasedPart, ProjectImage, Designer, Material, Instructions, UserSettings, Machine, UnclaimedSlice, Tag
+from .models import Project, Part, Group, Collection, PurchasedPart, ProjectImage, Designer, Material, Instructions, UserSettings, Machine, UnclaimedSlice, Tag
 from .forms import (
     ProjectForm, PartForm, GroupForm, PurchasedPartForm,
     ProjectImageForm, DesignerForm, MaterialForm,
@@ -26,6 +26,8 @@ from django.db.models import Count, Sum, Max, Q, F
 from django.contrib.auth.decorators import login_required
 from django.utils.text import slugify
 import tempfile
+import threading
+import shutil
 from django.core.files import File
 from .smart_import import (
     resolve_manifest_quantity,
@@ -44,7 +46,7 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 
 # Setup logger
@@ -56,6 +58,11 @@ class ProjectListView(ListView):
     model = Project
     template_name = 'projects/project_list.html'
     context_object_name = 'projects'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['collections'] = Collection.objects.prefetch_related('projects', 'cover_project__images').all()
+        return context
 
 class ProjectDetailView(DetailView):
     model = Project
@@ -435,6 +442,8 @@ def part_details(request, part_id):
         'volume': volume_val,
         'unit_system': unit_system,
         'material_cost': float(part.material_cost) if part.material_cost else None,
+        'surface_area': part.surface_area,
+        'filament_weight_g': float(part.filament_weight_g) if part.filament_weight_g else None,
     }
     
     # Only include stl_url if the file exists
@@ -1227,7 +1236,7 @@ def update_purchased_part(request, part_id):
         
         # Update fields
         part.name = request.POST.get('name', part.name)
-        part.price = float(request.POST.get('price', part.price))
+        part.price = Decimal(request.POST.get('price', part.price))
         part.quantity = int(request.POST.get('quantity', part.quantity))
         part.link = request.POST.get('link', part.link)
         part.status = request.POST.get('status', part.status)
@@ -1260,7 +1269,7 @@ def update_purchased_part(request, part_id):
             'status': 'error',
             'message': 'Purchased part not found'
         }, status=404)
-    except ValueError as e:
+    except (ValueError, InvalidOperation) as e:
         return JsonResponse({
             'status': 'error',
             'message': f'Invalid number format: {str(e)}'
@@ -1501,16 +1510,20 @@ def delete_part(request, part_id):
 @login_required
 def import_project(request):
     if request.method == 'POST':
-        try:
-            # Get the uploaded zip file
-            zip_file = request.FILES.get('zip_file')
-            if not zip_file:
-                logger.warning("Import project failed: No file uploaded")
-                return JsonResponse({
-                    'status': 'error',
-                    'message': 'No file was uploaded'
-                }, status=400)
+        # Get the uploaded zip file
+        zip_file = request.FILES.get('zip_file')
+        if not zip_file:
+            logger.warning("Import project failed: No file uploaded")
+            return JsonResponse({
+                'status': 'error',
+                'message': 'No file was uploaded'
+            }, status=400)
 
+        # Browser (AJAX) gets async import with progress; other clients keep the sync behavior
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return _start_async_import(request, zip_file)
+
+        try:
             # Create a temporary directory to extract files
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Extract the zip file
@@ -1529,7 +1542,7 @@ def import_project(request):
 
                 with open(manifest_path) as f:
                     project_data = json.load(f)
-                
+
                 logger.info(f"Importing project: {project_data['metadata']['name']}")
 
                 project = _import_project_data(project_data, temp_dir, request.user)
@@ -1546,13 +1559,108 @@ def import_project(request):
     return render(request, 'projects/import_project.html')
 
 
+def _start_async_import(request, zip_file):
+    """Persist the upload, validate it fast, then hand off to a background worker.
+
+    Returns a task_id immediately; progress is polled at /api/upload-progress/.
+    """
+    from projects import progress
+    from projects.volume import generate_task_id
+
+    # The worker thread outlives this request, so the file must live on disk.
+    # Django already spools uploads > FILE_UPLOAD_MAX_MEMORY_SIZE there.
+    zip_path = getattr(zip_file, 'temporary_file_path', lambda: None)()
+    if not zip_path:
+        fd, zip_path = tempfile.mkstemp(suffix='.zip')
+        with os.fdopen(fd, 'wb') as out:
+            for chunk in zip_file.chunks():
+                out.write(chunk)
+
+    # Fast-fail before committing to a background job
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            if 'manifest.json' not in z.namelist():
+                logger.warning("Import project failed: No manifest.json found in zip")
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No manifest.json file found in the zip'
+                }, status=400)
+            json.loads(z.read('manifest.json'))
+    except (zipfile.BadZipFile, ValueError):
+        logger.warning("Import project failed: invalid zip or unreadable manifest")
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid zip file or unreadable manifest.json'
+        }, status=400)
+
+    task_id = generate_task_id()
+    progress.create_task(task_id, 1)
+    _start_import_worker(task_id, zip_path, request.user)
+    return JsonResponse({'status': 'success', 'task_id': task_id})
+
+
+def _start_import_worker(task_id, zip_path, user):
+    """Spawn the import worker thread (separate so tests can run it inline)."""
+    threading.Thread(target=_run_import_task, args=(task_id, zip_path, user), daemon=True).start()
+
+
+def _run_import_task(task_id, zip_path, user):
+    """Background worker: extract, read manifest, import atomically, report progress."""
+    from projects import progress
+
+    temp_dir = None
+    try:
+        # Phase 1: extract (0-15%), per-file counter
+        temp_dir = tempfile.mkdtemp()
+        with zipfile.ZipFile(zip_path) as z:
+            names = z.namelist()
+            total = max(len(names), 1)
+            for i, name in enumerate(names, start=1):
+                progress.update_task(task_id, phase='extract', completed=i, total=total,
+                                     status=f'Extracting {i} of {total} files...',
+                                     percent=int(i / total * 15))
+                z.extract(name, temp_dir)
+
+        # Phase 2: manifest (15-20%)
+        progress.update_task(task_id, phase='manifest', status='Reading manifest...', percent=18)
+        with open(os.path.join(temp_dir, 'manifest.json')) as f:
+            project_data = json.load(f)
+        logger.info(f"Importing project: {project_data['metadata']['name']}")
+
+        # Phases 3-5 (20-100%) — the atomic import reports via this callback
+        def on_progress(phase, percent, status, completed=None, total=None):
+            progress.update_task(task_id, phase=phase, percent=percent, status=status,
+                                 completed=completed, total=total)
+
+        project = _import_project_data(project_data, temp_dir, user, on_progress=on_progress)
+
+        progress.finish(task_id, True, redirect_url=reverse('projects:project_detail', args=[project.id]))
+    except Exception as e:
+        logger.exception(f"Error importing project (task {task_id}): {e}")
+        progress.finish(task_id, False, error=str(e))
+    finally:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        try:
+            os.unlink(zip_path)
+        except OSError:
+            pass
+
+
 @transaction.atomic
-def _import_project_data(project_data, temp_dir, user):
+def _import_project_data(project_data, temp_dir, user, on_progress=None):
     """Create all objects for an imported project.
 
     Atomic so a mid-import failure rolls back instead of leaving partial
     data behind. Returns the new Project.
+
+    on_progress(phase, percent, status, completed, total) is called at each
+    stage when provided (background import); ignored otherwise.
     """
+    def report(phase, percent, status, completed=None, total=None):
+        if on_progress:
+            on_progress(phase, percent, status, completed=completed, total=total)
+
     # Find designer by name if available
     designer = None
     if designer_name := project_data['metadata'].get('designer'):
@@ -1584,9 +1692,11 @@ def _import_project_data(project_data, temp_dir, user):
         tag, _ = Tag.objects.get_or_create(name=tag_name)
         project.tags.add(tag)
     logger.info(f"Created project: {project.name} (ID: {project.id})")
+    report('setup', 22, 'Project created')
 
     # Create or get materials
     materials = {}
+    report('setup', 25, f'Importing {len(project_data["materials"])} materials...')
     for material_data in project_data['materials']:
         # Try to get existing material by name
         existing_material = Material.objects.filter(name=material_data['name']).first()
@@ -1629,9 +1739,14 @@ def _import_project_data(project_data, temp_dir, user):
             project=project
         )
         groups[group_data['id']] = group
+    report('setup', 30, 'Groups created')
 
     # Create parts
-    for part_data in project_data['parts']:
+    part_count = len(project_data['parts'])
+    for i, part_data in enumerate(project_data['parts'], start=1):
+        report('parts', 30 + int((i - 1) / max(part_count, 1) * 60),
+               f'Importing part {i} of {part_count}: {part_data["name"]}',
+               completed=i - 1, total=part_count)
         part = Part.objects.create(
             project=project,
             name=part_data['name'],
@@ -1658,6 +1773,7 @@ def _import_project_data(project_data, temp_dir, user):
                     part.thumbnail.save(os.path.basename(thumbnail_path), File(f), save=True)
 
     # Create purchased parts
+    report('finalize', 92, 'Adding purchased parts & instructions...')
     for part_data in project_data['purchased_parts']:
         PurchasedPart.objects.create(
             project=project,
@@ -2262,6 +2378,116 @@ def apply_smart_parsing(request, project_id):
         'quantities_updated': quantities_updated,
         'mirrors_created': mirrors_created,
     })
+
+@login_required
+@require_POST
+def collection_create(request):
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    name = (data.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'status': 'error', 'message': 'Collection name is required'}, status=400)
+    description = (data.get('description') or '').strip()
+    project_ids = data.get('project_ids') or []
+    projects = []
+    if project_ids:
+        projects = list(Project.objects.filter(id__in=project_ids))
+        if len(projects) != len(set(project_ids)):
+            return JsonResponse({'status': 'error', 'message': 'One or more projects do not exist'}, status=400)
+    try:
+        collection = Collection.objects.create(name=name, description=description)
+        if projects:
+            collection.projects.add(*projects)
+    except Exception as e:
+        logger.error(f'Error creating collection: {str(e)}')
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'success', 'message': f'Collection "{name}" created', 'id': collection.id})
+
+@login_required
+@require_POST
+def collection_update(request, pk):
+    collection = get_object_or_404(Collection, id=pk)
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    name = (data.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'status': 'error', 'message': 'Collection name is required'}, status=400)
+    try:
+        collection.name = name
+        if 'description' in data:
+            collection.description = (data.get('description') or '').strip()
+        if 'cover_project_id' in data:
+            cover_project_id = data.get('cover_project_id')
+            if cover_project_id not in (None, ''):
+                cover_project = Project.objects.filter(id=cover_project_id).first()
+                if cover_project is None:
+                    return JsonResponse({'status': 'error', 'message': 'Cover project does not exist'}, status=400)
+                collection.cover_project = cover_project
+            else:
+                collection.cover_project = None
+        collection.save()
+    except Exception as e:
+        logger.error(f'Error updating collection: {str(e)}')
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'success', 'message': f'Collection "{name}" updated'})
+
+@login_required
+@require_POST
+def collection_delete(request, pk):
+    collection = get_object_or_404(Collection, id=pk)
+    try:
+        name = collection.name
+        collection.delete()
+    except Exception as e:
+        logger.error(f'Error deleting collection: {str(e)}')
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'success', 'message': f'Collection "{name}" deleted'})
+
+@login_required
+@require_POST
+def collection_add_projects(request, pk):
+    collection = get_object_or_404(Collection, id=pk)
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    project_ids = data.get('project_ids') or []
+    if not project_ids:
+        return JsonResponse({'status': 'error', 'message': 'No projects selected'}, status=400)
+    try:
+        projects = list(Project.objects.filter(id__in=project_ids))
+        if len(projects) != len(set(project_ids)):
+            return JsonResponse({'status': 'error', 'message': 'One or more projects do not exist'}, status=400)
+        collection.projects.add(*projects)
+    except Exception as e:
+        logger.error(f'Error adding projects to collection: {str(e)}')
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'success', 'message': f'Added {len(projects)} project(s) to "{collection.name}"'})
+
+@login_required
+@require_POST
+def collection_remove_project(request, pk):
+    collection = get_object_or_404(Collection, id=pk)
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+    project_id = data.get('project_id')
+    if not project_id:
+        return JsonResponse({'status': 'error', 'message': 'No project specified'}, status=400)
+    try:
+        project = Project.objects.filter(id=project_id).first()
+        if project is None:
+            return JsonResponse({'status': 'error', 'message': 'Project does not exist'}, status=400)
+        collection.projects.remove(project)
+    except Exception as e:
+        logger.error(f'Error removing project from collection: {str(e)}')
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'success', 'message': f'Removed "{project.name}" from "{collection.name}"'})
 
 @login_required
 def api_ofd_inventory(request):
@@ -3127,7 +3353,7 @@ def project_generate_thumbnails(request, project_id):
 @require_POST
 def project_calculate_volumes(request, project_id):
     project = get_object_or_404(Project, id=project_id)
-    parts = project.parts.exclude(stl_file='').filter(volume__isnull=True)
+    parts = project.parts.exclude(stl_file='')
     pipeline_tasks = [(part.id, part.stl_file.path) for part in parts]
     
     if not pipeline_tasks:

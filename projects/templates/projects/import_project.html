@@ -3,6 +3,72 @@
 
 {% block title %}Import Project - ModelFoundry{% endblock %}
 
+{% block extra_css %}
+<style>
+.upload-progress-modal {
+    z-index: 1060;
+}
+.upload-progress-modal .modal-content {
+    background-color: var(--bg-darker) !important;
+    border-color: var(--border-dark) !important;
+}
+.upload-progress-modal .modal-header {
+    background-color: var(--bg-grey) !important;
+    border-bottom-color: var(--border-dark) !important;
+    color: var(--text-light) !important;
+}
+.upload-progress-modal .modal-body {
+    background-color: var(--bg-darker) !important;
+    color: var(--text-light) !important;
+}
+.upload-progress-modal .progress {
+    background-color: var(--bg-grey);
+    border-radius: 5px;
+}
+.upload-progress-modal .progress-bar {
+    background: linear-gradient(90deg, var(--primary-color), #22d3ee);
+    transition: width 0.6s ease;
+}
+/* Phase stepper styles */
+.phase-row {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid transparent;
+    transition: all 0.3s ease;
+}
+.phase-row.active {
+    background: rgba(var(--primary-color-rgb, 74, 222, 128), 0.08);
+    border-color: rgba(var(--primary-color-rgb, 74, 222, 128), 0.25);
+}
+.phase-row.completed {
+    opacity: 0.7;
+}
+.phase-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.05);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+.phase-row.active .phase-icon {
+    background: var(--primary-color);
+    color: #000;
+    box-shadow: 0 0 12px rgba(var(--primary-color-rgb, 74, 222, 128), 0.4);
+}
+.phase-row.completed .phase-icon {
+    background: var(--primary-color);
+    color: #000;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container py-5">
     <div class="row justify-content-center">
@@ -13,8 +79,8 @@
                     <p class="text-muted text-center mb-4">
                         Upload a previously exported project file to import it into your workspace.
                     </p>
-                    
-                    <form method="post" enctype="multipart/form-data">
+
+                    <form method="post" enctype="multipart/form-data" id="importForm">
                         {% csrf_token %}
                         <div class="mb-4">
                             <label for="zip_file" class="form-label">Project File</label>
@@ -23,9 +89,9 @@
                                 Select a project file (.zip) that was previously exported from ModelFoundry.
                             </div>
                         </div>
-                        
+
                         <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary" id="importBtn">
                                 <i class="fas fa-file-import me-2"></i>Import Project
                             </button>
                             <a href="{% url 'projects:index' %}" class="btn btn-outline-secondary">
@@ -38,4 +104,236 @@
         </div>
     </div>
 </div>
-{% endblock %} 
+
+<!-- Import Progress Modal -->
+<div class="modal fade upload-progress-modal" id="importProgressModal" tabindex="-1" aria-labelledby="importProgressModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog">
+        <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+            <div class="modal-header border-bottom border-dark">
+                <h5 class="modal-title fw-bold" id="importProgressModalLabel">
+                    <i class="fas fa-file-import me-2 text-primary"></i>Importing Project
+                </h5>
+            </div>
+            <div class="modal-body">
+                <!-- Overall progress bar -->
+                <div class="progress mb-4" style="height: 8px;">
+                    <div class="progress-bar" role="progressbar"
+                         id="importProgressBar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                    </div>
+                </div>
+
+                <!-- Phase stepper -->
+                <div class="d-flex flex-column gap-3">
+                    <div class="phase-row d-flex align-items-center" id="phaseExtract">
+                        <div class="phase-icon me-3" id="phaseExtractIcon">
+                            <i class="fas fa-file-archive"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size: 0.95rem;">Extract Archive</div>
+                            <small class="text-muted" id="phaseExtractStatus">Waiting...</small>
+                        </div>
+                        <div class="text-end" id="phaseExtractCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
+                    </div>
+
+                    <div class="phase-row d-flex align-items-center" id="phaseManifest">
+                        <div class="phase-icon me-3" id="phaseManifestIcon">
+                            <i class="fas fa-file-code"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size: 0.95rem;">Read Manifest</div>
+                            <small class="text-muted" id="phaseManifestStatus">Waiting...</small>
+                        </div>
+                    </div>
+
+                    <div class="phase-row d-flex align-items-center" id="phaseSetup">
+                        <div class="phase-icon me-3" id="phaseSetupIcon">
+                            <i class="fas fa-palette"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size: 0.95rem;">Project &amp; Materials</div>
+                            <small class="text-muted" id="phaseSetupStatus">Waiting...</small>
+                        </div>
+                    </div>
+
+                    <div class="phase-row d-flex align-items-center" id="phaseParts">
+                        <div class="phase-icon me-3" id="phasePartsIcon">
+                            <i class="fas fa-cube"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size: 0.95rem;">Import Parts</div>
+                            <small class="text-muted" id="phasePartsStatus">Waiting...</small>
+                        </div>
+                        <div class="text-end" id="phasePartsCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
+                    </div>
+
+                    <div class="phase-row d-flex align-items-center" id="phaseFinalize">
+                        <div class="phase-icon me-3" id="phaseFinalizeIcon">
+                            <i class="fas fa-flag-checkered"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size: 0.95rem;">Finalize</div>
+                            <small class="text-muted" id="phaseFinalizeStatus">Waiting...</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top border-dark d-flex align-items-center gap-2 py-3">
+                <small class="text-danger flex-grow-1" id="importErrorText"></small>
+                <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="importCloseBtn">
+                    <i class="fas fa-times me-1"></i>Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    const $form = $('#importForm');
+    const $btn = $('#importBtn');
+    const originalHtml = $btn.html();
+    const progressModal = new bootstrap.Modal(document.getElementById('importProgressModal'), { backdrop: 'static', keyboard: false });
+    let pollInterval = null;
+
+    const PHASES = ['extract', 'manifest', 'setup', 'parts', 'finalize'];
+    const ROWS = {};
+    PHASES.forEach(function(key) {
+        const id = '#' + key.charAt(0).toUpperCase() + key.slice(1);
+        ROWS[key] = { row: $(id), icon: $(id + 'Icon'), status: $(id + 'Status'), counter: $(id + 'Counter') };
+    });
+
+    function markDone(key) {
+        const r = ROWS[key];
+        if (r.row.hasClass('completed')) return;
+        r.row.removeClass('active').addClass('completed');
+        r.icon.html('<i class="fas fa-check"></i>');
+        r.status.text('Complete');
+    }
+
+    function resetStepper() {
+        PHASES.forEach(function(key) {
+            const r = ROWS[key];
+            r.row.removeClass('active completed');
+            r.status.text('Waiting...');
+            r.counter.text('');
+        });
+        $('#phaseExtractIcon').html('<i class="fas fa-file-archive"></i>');
+        $('#phaseManifestIcon').html('<i class="fas fa-file-code"></i>');
+        $('#phaseSetupIcon').html('<i class="fas fa-palette"></i>');
+        $('#phasePartsIcon').html('<i class="fas fa-cube"></i>');
+        $('#phaseFinalizeIcon').html('<i class="fas fa-flag-checkered"></i>');
+    }
+
+    function renderPhase(data) {
+        const phase = data.phase;
+        const idx = PHASES.indexOf(phase);
+
+        if (phase === 'complete' || data.done) {
+            PHASES.forEach(markDone);
+            $('#importProgressBar').css('width', '100%').attr('aria-valuenow', 100);
+            return;
+        }
+        if (idx === -1) return;
+
+        for (let i = 0; i < idx; i++) markDone(PHASES[i]);
+
+        const r = ROWS[phase];
+        r.row.addClass('active');
+        r.status.text(data.status || 'Working...');
+        if (data.total) {
+            r.counter.text((data.completed || 0) + ' / ' + data.total);
+        }
+    }
+
+    function startPolling(taskId) {
+        pollInterval = setInterval(function() {
+            $.getJSON(`/api/upload-progress/${taskId}/`, function(data) {
+                if (!data) return;
+
+                $('#importProgressBar').css('width', (data.percent || 0) + '%').attr('aria-valuenow', data.percent || 0);
+                renderPhase(data);
+
+                if (data.done) {
+                    clearInterval(pollInterval);
+                    pollInterval = null;
+                    if (data.error) {
+                        $('#importErrorText').text(data.error);
+                        $('#importCloseBtn').removeClass('d-none');
+                        $btn.html(originalHtml).prop('disabled', false);
+                    } else {
+                        setTimeout(function() {
+                            window.location.href = data.redirect_url || '{% url "projects:index" %}';
+                        }, 800);
+                    }
+                }
+            });
+        }, 500);
+
+        // Safety timeout: 15 minutes max (import keeps running server-side)
+        setTimeout(function() {
+            if (!pollInterval) return;
+            clearInterval(pollInterval);
+            pollInterval = null;
+            $('#importErrorText').text('Still working — large imports can take a while. Check back on your projects list.');
+            $('#importCloseBtn').removeClass('d-none');
+            $btn.html(originalHtml).prop('disabled', false);
+        }, 900000);
+    }
+
+    function fail(message) {
+        if (pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+        $('#importErrorText').text(message);
+        $('#importCloseBtn').removeClass('d-none');
+        $btn.html(originalHtml).prop('disabled', false);
+    }
+
+    $form.on('submit', function(e) {
+        e.preventDefault();
+        const fileInput = document.getElementById('zip_file');
+        if (!fileInput.files.length) return;
+
+        $btn.html('<i class="fas fa-spinner fa-spin me-2"></i>Starting import...').prop('disabled', true);
+        $('#importErrorText').text('');
+        $('#importCloseBtn').addClass('d-none');
+        resetStepper();
+        $('#importProgressBar').css('width', '2%').attr('aria-valuenow', 2);
+        progressModal.show();
+
+        const formData = new FormData();
+        formData.append('zip_file', fileInput.files[0]);
+
+        $.ajax({
+            url: '{% url "projects:import_project" %}',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: { 'X-CSRFToken': $('input[name="csrfmiddlewaretoken"]').val() },
+            success: function(response) {
+                if (response.status !== 'success' || !response.task_id) {
+                    fail(response.message || 'Could not start import');
+                    return;
+                }
+                startPolling(response.task_id);
+            },
+            error: function(xhr) {
+                let message = 'Error starting import. Please try again.';
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response && response.message) message = response.message;
+                } catch (err) {}
+                fail(message);
+            }
+        });
+    });
+
+    $('#importCloseBtn').on('click', function() {
+        progressModal.hide();
+        $btn.html(originalHtml).prop('disabled', false);
+    });
+});
+</script>
+{% endblock %}

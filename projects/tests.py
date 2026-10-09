@@ -2,7 +2,7 @@ from django.test import TestCase, SimpleTestCase, Client, override_settings
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from .models import Project, Part, Group, PurchasedPart, Material, Designer, Instructions, ProjectImage
+from .models import Project, Part, Group, Collection, PurchasedPart, Material, Designer, Instructions, ProjectImage
 import io
 import json
 import os
@@ -1684,3 +1684,370 @@ class AutoNameParsingSettingTests(TestCase):
         self._save_general({})
         response = self.client.get(reverse('projects:settings'))
         self.assertNotIn(b'name="auto_name_parsing" checked', response.content)
+
+
+class ShellInfillCostTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='shelluser', password='password123')
+        self.material = Material.objects.create(
+            name='Test PLA',
+            type='PLA',
+            density=Decimal('1.25'),
+            cost=Decimal('25.00'),
+            weight=Decimal('1000.00')
+        )
+        self.project = Project.objects.create(name='Shell Project', user=self.user)
+        self.part = Part.objects.create(
+            name='50mm Cube',
+            project=self.project,
+            material=self.material,
+            volume=125000.0,
+            surface_area=15000.0
+        )
+
+    def test_effective_volume_calculation(self):
+        # 50mm cube: volume=125,000 mm³, area=15,000 mm²
+        # shell_vol = min(125000, 15000 * 1.2) = 18,000 mm³
+        # core_vol = 125000 - 18000 = 107,000 mm³
+        # infill_vol = 107000 * 0.15 = 16,050 mm³
+        # printed_vol = 18000 + 16050 = 34,050 mm³
+        self.assertAlmostEqual(self.part.effective_volume, 34050.0, places=1)
+
+    def test_material_cost_uses_shell_infill(self):
+        # Printed volume: 34.05 cm³ * 1.25 g/cm³ = 42.5625 g
+        # Cost at $25/kg: 42.5625 * $0.025 = $1.0640625
+        # (Raw solid cost would have been $3.90625)
+        self.assertAlmostEqual(self.part.material_cost, 1.0640625, places=5)
+
+    def test_thin_wall_part_capped_at_total_volume(self):
+        # Thin sheet where area * 1.2 > volume
+        thin_part = Part.objects.create(
+            name='Thin Sheet',
+            project=self.project,
+            material=self.material,
+            volume=10000.0,
+            surface_area=20000.0
+        )
+        self.assertEqual(thin_part.effective_volume, 10000.0)
+
+    def test_slicer_weight_takes_precedence_over_geometry(self):
+        # When slicer filament_weight_g is present, use it directly
+        self.part.filament_weight_g = Decimal('20.00')
+        self.part.save()
+        # 20g * $0.025/g = $0.50
+        self.assertAlmostEqual(self.part.material_cost, 0.50, places=4)
+
+    def test_compute_mesh_stats_stl(self):
+        import tempfile
+        import trimesh
+        from projects.volume import compute_mesh_stats
+
+        box = trimesh.creation.box(extents=[10, 10, 10])
+        with tempfile.NamedTemporaryFile(suffix='.stl', delete=False) as f:
+            temp_path = f.name
+            box.export(temp_path)
+
+        try:
+            stats = compute_mesh_stats(temp_path)
+            self.assertIsNotNone(stats)
+            vol, area = stats
+            self.assertAlmostEqual(vol, 1000.0, places=1)
+            self.assertAlmostEqual(area, 600.0, places=1)
+        finally:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_part_details_api_includes_surface_area_and_filament_weight(self):
+        self.client.login(username='shelluser', password='password123')
+        self.part.filament_weight_g = Decimal('25.50')
+        self.part.save()
+        response = self.client.get(reverse('projects:part_details', args=[self.part.id]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['surface_area'], 15000.0)
+        self.assertEqual(data['filament_weight_g'], 25.50)
+
+class CollectionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='collectionuser', password='testpass123')
+        self.client = Client()
+        self.client.login(username='collectionuser', password='testpass123')
+        self.project_a = Project.objects.create(name='Project A', user=self.user)
+        self.project_b = Project.objects.create(name='Project B', user=self.user)
+
+    def post_json(self, url, data):
+        return self.client.post(url, data=json.dumps(data), content_type='application/json')
+
+    def test_project_list_view_includes_collections(self):
+        collection = Collection.objects.create(name='My Collection')
+        collection.projects.add(self.project_a)
+        response = self.client.get(reverse('projects:project_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('collections', response.context)
+        self.assertEqual(list(response.context['collections']), [collection])
+
+    def test_create_collection(self):
+        response = self.post_json(reverse('projects:collection_create'), {'name': 'Living Room', 'description': 'Furniture'})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['status'], 'success')
+        collection = Collection.objects.get(name='Living Room')
+        self.assertEqual(collection.description, 'Furniture')
+        self.assertEqual(data['id'], collection.id)
+
+    def test_create_collection_requires_name(self):
+        response = self.post_json(reverse('projects:collection_create'), {'name': '   '})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['status'], 'error')
+
+    def test_create_collection_with_projects(self):
+        response = self.post_json(reverse('projects:collection_create'), {
+            'name': 'With Projects',
+            'project_ids': [self.project_a.id, self.project_b.id],
+        })
+        self.assertEqual(response.json()['status'], 'success')
+        collection = Collection.objects.get(name='With Projects')
+        self.assertEqual(collection.projects.count(), 2)
+
+    def test_create_collection_rejects_unknown_project_ids(self):
+        response = self.post_json(reverse('projects:collection_create'), {
+            'name': 'Bad',
+            'project_ids': [self.project_a.id, 999999],
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Collection.objects.filter(name='Bad').exists())
+
+    def test_update_collection(self):
+        collection = Collection.objects.create(name='Old Name')
+        response = self.post_json(reverse('projects:collection_update', args=[collection.id]), {
+            'name': 'New Name',
+            'description': 'Updated',
+            'cover_project_id': self.project_a.id,
+        })
+        self.assertEqual(response.json()['status'], 'success')
+        collection.refresh_from_db()
+        self.assertEqual(collection.name, 'New Name')
+        self.assertEqual(collection.description, 'Updated')
+        self.assertEqual(collection.cover_project_id, self.project_a.id)
+
+    def test_update_collection_clears_cover(self):
+        collection = Collection.objects.create(name='C', cover_project=self.project_a)
+        response = self.post_json(reverse('projects:collection_update', args=[collection.id]), {
+            'name': 'C',
+            'cover_project_id': None,
+        })
+        self.assertEqual(response.json()['status'], 'success')
+        collection.refresh_from_db()
+        self.assertIsNone(collection.cover_project_id)
+
+    def test_update_collection_requires_name(self):
+        collection = Collection.objects.create(name='C')
+        response = self.post_json(reverse('projects:collection_update', args=[collection.id]), {'name': ''})
+        self.assertEqual(response.status_code, 400)
+
+    def test_delete_collection_keeps_projects(self):
+        collection = Collection.objects.create(name='Doomed')
+        collection.projects.add(self.project_a)
+        response = self.post_json(reverse('projects:collection_delete', args=[collection.id]), {})
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertFalse(Collection.objects.filter(id=collection.id).exists())
+        self.assertTrue(Project.objects.filter(id=self.project_a.id).exists())
+
+    def test_add_projects_to_collection(self):
+        collection = Collection.objects.create(name='Target')
+        response = self.post_json(reverse('projects:collection_add_projects', args=[collection.id]), {
+            'project_ids': [self.project_a.id],
+        })
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertEqual(list(collection.projects.all()), [self.project_a])
+
+    def test_add_projects_is_idempotent(self):
+        collection = Collection.objects.create(name='Target')
+        url = reverse('projects:collection_add_projects', args=[collection.id])
+        self.post_json(url, {'project_ids': [self.project_a.id]})
+        self.post_json(url, {'project_ids': [self.project_a.id]})
+        self.assertEqual(collection.projects.count(), 1)
+
+    def test_add_projects_preserves_unselected_members(self):
+        collection = Collection.objects.create(name='Target')
+        collection.projects.add(self.project_b)
+        response = self.post_json(reverse('projects:collection_add_projects', args=[collection.id]), {
+            'project_ids': [self.project_a.id],
+        })
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertEqual(collection.projects.count(), 2)
+
+    def test_add_projects_requires_ids(self):
+        collection = Collection.objects.create(name='Target')
+        response = self.post_json(reverse('projects:collection_add_projects', args=[collection.id]), {})
+        self.assertEqual(response.status_code, 400)
+
+    def test_remove_project_from_collection(self):
+        collection = Collection.objects.create(name='Target')
+        collection.projects.add(self.project_a, self.project_b)
+        response = self.post_json(reverse('projects:collection_remove_project', args=[collection.id]), {
+            'project_id': self.project_a.id,
+        })
+        self.assertEqual(response.json()['status'], 'success')
+        self.assertEqual(list(collection.projects.all()), [self.project_b])
+
+    def test_collection_endpoints_404_for_missing_collection(self):
+        client = Client(raise_request_exception=False)
+        client.login(username='collectionuser', password='testpass123')
+        response = client.post(
+            reverse('projects:collection_add_projects', args=[999999]),
+            data=json.dumps({'project_ids': [self.project_a.id]}),
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_cover_image_fallback_chain(self):
+        collection = Collection.objects.create(name='Art')
+        self.assertIsNone(collection.cover_image)
+
+        ProjectImage.objects.create(project=self.project_a, image=SimpleUploadedFile('a.jpg', b''))
+        collection.projects.add(self.project_a)
+        self.assertEqual(collection.cover_image.project_id, self.project_a.id)
+
+        collection.cover_project = self.project_b
+        collection.save()
+        # Cover project has no image yet → falls back to first member
+        self.assertEqual(collection.cover_image.project_id, self.project_a.id)
+
+        ProjectImage.objects.create(project=self.project_b, image=SimpleUploadedFile('b.jpg', b''))
+        self.assertEqual(collection.cover_image.project_id, self.project_b.id)
+
+
+class ImportProgressTests(TestCase):
+    """Async (AJAX) import: task hand-off, worker completion, progress store fields.
+
+    The worker is patched to run inline (like dispatch_pipeline in the upload
+    tests) so no background thread opens a second DB connection against the
+    test transaction.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='importuser', password='testpass123')
+        self.client = Client()
+        self.client.login(username='importuser', password='testpass123')
+
+    def _make_zip(self, manifest=None, entries=None):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w') as zf:
+            if manifest is not None:
+                zf.writestr('manifest.json', json.dumps(manifest))
+            for name, content in (entries or {}).items():
+                zf.writestr(name, content)
+        return buf.getvalue()
+
+    def _manifest(self, parts=None):
+        return {
+            'metadata': {'name': 'Async Import', 'description': 'desc'},
+            'materials': [{
+                'id': 1, 'name': 'Test Material', 'type': 'PLA', 'description': '',
+                'density': 1.25, 'color': '#FF0000', 'is_active': True,
+                'brand': '', 'link': '', 'cost': 25.00, 'weight': 1000.00
+            }],
+            'groups': [{'id': 1, 'name': 'Test Group'}],
+            'parts': parts or [],
+            'purchased_parts': [],
+            'instructions': [],
+            'project_images': []
+        }
+
+    def _post_ajax(self, zip_bytes):
+        """AJAX POST with the import worker run inline (no background thread)."""
+        from projects import views as project_views
+
+        def run_inline(task_id, zip_path, user):
+            project_views._run_import_task(task_id, zip_path, user)
+
+        with patch('projects.views._start_import_worker', side_effect=run_inline):
+            return self.client.post(
+                reverse('projects:import_project'),
+                {'zip_file': SimpleUploadedFile('test.zip', zip_bytes)},
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+            )
+
+    def test_import_page_renders_with_progress_modal(self):
+        response = self.client.get(reverse('projects:import_project'))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('importProgressModal', html)
+        self.assertIn('/api/upload-progress/', html)
+
+    def test_ajax_import_returns_task_and_completes(self):
+        response = self._post_ajax(self._make_zip(self._manifest(parts=[
+            {'name': 'Gear', 'quantity': 1, 'material_id': 1, 'color': '#FF0000',
+             'completed': 0, 'group_id': 1, 'volume': 10.0}
+        ])))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['status'], 'success')
+
+        from projects import progress
+        task = progress.get_task(data['task_id'])
+        self.assertTrue(task['done'])
+        self.assertIsNone(task['error'])
+        project = Project.objects.get(name='Async Import')
+        self.assertIn(str(project.id), task['redirect_url'])
+        self.assertEqual(Part.objects.filter(project=project, name='Gear').count(), 1)
+
+    def test_ajax_import_missing_manifest_rejected(self):
+        response = self._post_ajax(self._make_zip(None, entries={'readme.txt': 'hello'}))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('manifest', response.json()['message'])
+        self.assertFalse(Project.objects.exists())
+
+    def test_ajax_import_invalid_zip_rejected(self):
+        response = self._post_ajax(b'this is not a zip file')
+        self.assertEqual(response.status_code, 400)
+
+    def test_ajax_import_bad_manifest_json_rejected(self):
+        response = self._post_ajax(self._make_zip(None, entries={'manifest.json': '{not json'}))
+        self.assertEqual(response.status_code, 400)
+
+    def test_import_failure_reports_error(self):
+        # Manifest parses but lacks required keys -> worker fails after hand-off
+        response = self._post_ajax(self._make_zip({'metadata': {}}))
+        self.assertEqual(response.status_code, 200)
+        from projects import progress
+        task = progress.get_task(response.json()['task_id'])
+        self.assertTrue(task['done'])
+        self.assertTrue(task['error'])
+        self.assertFalse(Project.objects.exists())
+
+    def test_progress_finish_and_percent_override(self):
+        from projects import progress
+        tid = 'import-test-1'
+        progress.create_task(tid, 1)
+        progress.update_task(tid, phase='parts', percent=55, status='Importing part 2 of 4')
+        task = progress.get_task(tid)
+        self.assertEqual(task['percent'], 55)
+        self.assertIsNone(task['error'])
+
+        progress.finish(tid, True, redirect_url='/projects/9/')
+        task = progress.get_task(tid)
+        self.assertTrue(task['done'])
+        self.assertEqual(task['percent'], 100)
+        self.assertEqual(task['redirect_url'], '/projects/9/')
+
+        tid2 = 'import-test-2'
+        progress.create_task(tid2, 1)
+        progress.update_task(tid2, phase='parts', percent=40)
+        progress.finish(tid2, False, error='boom')
+        task2 = progress.get_task(tid2)
+        self.assertTrue(task2['done'])
+        self.assertEqual(task2['percent'], 40)
+        self.assertEqual(task2['error'], 'boom')
+
+        # Legacy upload pipeline phases are unaffected
+        tid3 = 'import-test-3'
+        progress.create_task(tid3, 10)
+        progress.update_task(tid3, phase='volumes', completed=5)
+        self.assertEqual(progress.get_task(tid3)['percent'], 67 + int(5 / 10 * 33))
+
+        progress.cleanup_task(tid)
+        progress.cleanup_task(tid2)
+        progress.cleanup_task(tid3)
+

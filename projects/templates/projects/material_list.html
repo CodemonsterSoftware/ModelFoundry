@@ -43,7 +43,7 @@
                             <i class="fas fa-weight-hanging text-warning"></i> {{ material.density }} g/cm³
                         </span>
                         <span class="premium-badge">
-                            <i class="fas fa-dollar-sign text-success"></i> ${{ material.cost_per_kg }}/kg
+                            <i class="fas fa-dollar-sign text-success"></i> ${{ material.cost_per_kg|floatformat:2 }}/kg
                         </span>
                     </div>
                     

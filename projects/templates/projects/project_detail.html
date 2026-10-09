@@ -1193,6 +1193,7 @@
                                     <div>
                                         <small class="text-muted text-uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.5px;">Material Cost</small>
                                         <div class="fw-bold text-success" id="calculatedCost" style="font-size: 1.1rem;">-</div>
+                                        <div class="text-muted" id="costBasisNote" style="font-size: 0.65rem; line-height: 1.1;"></div>
                                     </div>
                                 </div>
                             </div>
@@ -2030,6 +2031,13 @@ document.addEventListener('DOMContentLoaded', function() {
             // Update calculated values
             $('#calculatedVolume').text(data.volume ? `${data.volume.toFixed(2)} ${data.unit_system === 'metric' ? 'cm³' : 'in³'}` : '-');
             $('#calculatedCost').text(data.material_cost ? `$${data.material_cost.toFixed(2)}` : '-');
+            if (data.filament_weight_g) {
+                $('#costBasisNote').text(`${data.filament_weight_g}g (slicer)`);
+            } else if (data.surface_area) {
+                $('#costBasisNote').text('15% infill estimate');
+            } else {
+                $('#costBasisNote').text('');
+            }
 
             // Store the part ID for saving changes
             $('#partDetailsModal').data('part-id', partId);
@@ -2065,6 +2073,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update calculated values again in case they weren't set earlier
                 $('#calculatedVolume').text(data.volume ? `${data.volume.toFixed(2)} ${data.unit_system === 'metric' ? 'cm³' : 'in³'}` : '-');
                 $('#calculatedCost').text(data.material_cost ? `$${data.material_cost.toFixed(2)}` : '-');
+                if (data.filament_weight_g) {
+                    $('#costBasisNote').text(`${data.filament_weight_g}g (slicer)`);
+                } else if (data.surface_area) {
+                    $('#costBasisNote').text('15% infill estimate');
+                } else {
+                    $('#costBasisNote').text('');
+                }
 
                 if (data.stl_url) {
                     $('#partDetailsModal').data('stl-url', data.stl_url);

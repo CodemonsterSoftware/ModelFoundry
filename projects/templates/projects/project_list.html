@@ -49,7 +49,7 @@
         box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
         color: var(--text-light) !important;
     }
-    
+
     /* Badge Styling (Bypassing cache) */
     .premium-badge {
         font-size: 0.75rem;
@@ -63,12 +63,136 @@
         align-items: center;
         gap: 0.25rem;
     }
+
+    /* Index Tabs */
+    #index-tabs .nav-link {
+        background-color: var(--bg-darker);
+        border: 1px solid var(--border-dark);
+        color: var(--text-muted);
+    }
+    #index-tabs .nav-link:hover {
+        color: var(--text-light);
+    }
+    #index-tabs .nav-link.active {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+        color: #fff;
+    }
+
+    /* Bulk-select checkbox on project cards */
+    .project-select-wrap {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+    .project-card:hover .project-select-wrap,
+    .project-card.is-selected .project-select-wrap {
+        opacity: 1;
+    }
+    .project-select {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 1.4rem;
+        height: 1.4rem;
+        margin: 0;
+        cursor: pointer;
+        border-radius: 6px;
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        background-color: rgba(0, 0, 0, 0.35);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .project-select:hover {
+        border-color: var(--primary-color);
+    }
+    .project-select:checked {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3 3 7-7'/%3E%3C/svg%3E");
+        background-size: 75%;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+
+    /* Remove-from-collection button (collection view) */
+    .project-remove-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 5;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+        background: rgba(0, 0, 0, 0.45);
+        color: var(--text-light);
+        border: none;
+        border-radius: 8px;
+        width: 2rem;
+        height: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+    .project-card:hover .project-remove-btn {
+        opacity: 1;
+    }
+    .project-remove-btn:hover {
+        background: rgba(220, 53, 69, 0.85);
+        color: #fff;
+    }
+
+    /* Collection cards */
+    .collection-card {
+        cursor: pointer;
+    }
+    .collection-card.selected-collection .card {
+        border-color: var(--primary-color) !important;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+    }
+    .collection-desc {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    /* Bulk Action Bar (same pattern as project detail) */
+    .bulk-action-bar {
+        position: fixed;
+        bottom: -100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(30, 30, 35, 0.95);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        padding: 12px 24px;
+        z-index: 1050;
+        transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+    .bulk-action-bar.visible {
+        bottom: 30px;
+    }
+    #addToCollectionMenu .dropdown-item {
+        color: var(--text-light);
+    }
+    #addToCollectionMenu .dropdown-item:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid premium-index-wrapper px-4 mt-4">
-    
+
     <!-- Hero Section -->
     <div class="premium-hero animate-enter" style="animation-delay: 0ms;">
         <div class="row align-items-center position-relative" style="z-index: 1;">
@@ -79,7 +203,7 @@
             <div class="col-md-7 mt-3 mt-md-0 d-flex flex-column flex-md-row align-items-md-center justify-content-md-end gap-3">
                 <div class="search-container flex-grow-1" style="max-width: 400px;">
                     <i class="fas fa-search search-icon"></i>
-                    <input type="text" id="projectSearch" class="form-control" placeholder="Search projects..." style="border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <input type="text" id="projectSearch" class="form-control" placeholder="Search projects & collections..." style="border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                     <i class="fas fa-times-circle clear-icon" id="clearSearch"></i>
                 </div>
                 <div class="d-flex gap-2">
@@ -94,85 +218,232 @@
         </div>
     </div>
 
-    <!-- Active Projects -->
-    <div class="row g-4 mt-1" id="projectsContainer">
-        {% for project in projects %}
-        <div class="col-md-6 col-lg-4 col-xl-3 project-card animate-enter" 
-             style="animation-delay: {{ forloop.counter|add:'1' }}00ms;"
-             data-name="{{ project.name|lower }}" 
-             data-description="{{ project.description|lower }}" 
-             data-tags="{% for tag in project.tags.all %}{{ tag.name|lower }} {% endfor %}"
-             data-files="{% for image in project.images.all %}{{ image.image.name|lower }} {% endfor %}">
-            <div class="card h-100 premium-card hover-effect">
-                <a href="{% url 'projects:project_detail' project.pk %}" class="card-link d-flex flex-column h-100">
-                    <div class="project-image-container border-bottom border-dark">
-                        {% if project.images.first %}
-                        <img src="{{ project.images.first.image_thumbnail.url }}" alt="{{ project.name }}">
-                        {% else %}
-                        <div class="no-image">
-                            <i class="fas fa-cube fa-3x text-muted"></i>
+    <!-- Tab Navigation -->
+    <ul class="nav nav-pills mb-4 gap-2 animate-enter" id="index-tabs" role="tablist" style="animation-delay: 50ms;">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active px-4 py-2 fw-bold" data-bs-toggle="pill" data-bs-target="#all-projects-tab" type="button" role="tab">All Projects</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link px-4 py-2 fw-bold" data-bs-toggle="pill" data-bs-target="#collections-tab" type="button" role="tab">Collections</button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- ALL PROJECTS TAB -->
+        <div class="tab-pane fade show active" id="all-projects-tab" role="tabpanel">
+            <div class="row g-4" id="projectsContainer">
+                {% for project in projects %}
+                {% include 'projects/_project_card.html' with project=project card_delay="{{ forloop.counter|add:1 }}00" %}
+                {% empty %}
+                <div class="col-12 animate-enter" style="animation-delay: 200ms;">
+                    <div class="empty-state-dashed">
+                        <i class="fas fa-folder-open empty-icon"></i>
+                        <h3 class="fw-bold">No projects yet</h3>
+                        <p class="text-muted mb-4">Create your first 3D printing project to start organizing your files and parts.</p>
+                        <div class="d-flex justify-content-center gap-3">
+                            <a href="{% url 'projects:project_create' %}" class="btn btn-primary px-4 py-2" style="border-radius: 10px;">
+                                <i class="fas fa-plus me-2"></i> Create Project
+                            </a>
+                            <a href="{% url 'projects:import_project' %}" class="btn btn-outline-secondary px-4 py-2" style="border-radius: 10px;">
+                                <i class="fas fa-file-import me-2"></i> Import Project
+                            </a>
                         </div>
-                        {% endif %}
                     </div>
-                    <div class="card-body d-flex flex-column flex-grow-1">
-                        <h5 class="card-title fw-bold mb-3">{{ project.name }}</h5>
-                        
-                        <div class="mb-3">
-                            <span class="premium-badge">
-                                <i class="fas fa-cube text-info"></i> {{ project.total_parts }} Parts
-                            </span>
-                            <span class="premium-badge">
-                                {% if project.progress_percentage == 100 %}
-                                <i class="fas fa-check-circle text-success"></i> 100% Complete
-                                {% elif project.progress_percentage > 0 %}
-                                <i class="fas fa-tasks text-warning"></i> {{ project.progress_percentage }}% Complete
-                                {% else %}
-                                <i class="fas fa-hourglass-start text-muted"></i> 0% Complete
-                                {% endif %}
-                            </span>
-                        </div>
-                        
-                        {% if project.tags.all %}
-                        <div class="mt-auto pt-2 d-flex flex-wrap gap-2">
-                            {% for tag in project.tags.all %}
-                                <span class="premium-badge" style="background-color: var(--bg-darker); border-color: var(--border-dark);">
-                                    <i class="fas fa-tag text-primary"></i> {{ tag.name }}
-                                </span>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </div>
-                </a>
-            </div>
-        </div>
-        {% empty %}
-        <div class="col-12 animate-enter" style="animation-delay: 200ms;">
-            <div class="empty-state-dashed">
-                <i class="fas fa-folder-open empty-icon"></i>
-                <h3 class="fw-bold">No projects yet</h3>
-                <p class="text-muted mb-4">Create your first 3D printing project to start organizing your files and parts.</p>
-                <div class="d-flex justify-content-center gap-3">
-                    <a href="{% url 'projects:project_create' %}" class="btn btn-primary px-4 py-2" style="border-radius: 10px;">
-                        <i class="fas fa-plus me-2"></i> Create Project
-                    </a>
-                    <a href="{% url 'projects:import_project' %}" class="btn btn-outline-secondary px-4 py-2" style="border-radius: 10px;">
-                        <i class="fas fa-file-import me-2"></i> Import Project
-                    </a>
                 </div>
+                {% endfor %}
             </div>
         </div>
-        {% endfor %}
+
+        <!-- COLLECTIONS TAB -->
+        <div class="tab-pane fade" id="collections-tab" role="tabpanel">
+            <div class="d-flex justify-content-between align-items-center mb-4 animate-enter flex-wrap gap-2" style="animation-delay: 100ms;">
+                <h2 class="h4 fw-bold mb-0"><i class="fas fa-layer-group me-2 text-primary"></i>Collections</h2>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newCollectionModal" style="border-radius: 10px;">
+                    <i class="fas fa-plus me-1"></i>New Collection
+                </button>
+            </div>
+
+            <!-- Collection cards -->
+            <div class="row g-4 mb-4" id="collectionCardsRow">
+                {% for collection in collections %}
+                {% with cprojects=collection.projects.all image=collection.cover_image %}
+                <div class="col-md-6 col-lg-4 col-xl-3 collection-card animate-enter"
+                     style="animation-delay: {{ forloop.counter|add:'1' }}00ms;"
+                     data-collection-id="{{ collection.id }}"
+                     data-name="{{ collection.name|lower }}"
+                     data-description="{{ collection.description|lower }}">
+                    <div class="card h-100 premium-card hover-effect">
+                        <div class="project-image-container border-bottom border-dark">
+                            {% if image %}
+                            <img src="{{ image.image_thumbnail.url }}" alt="{{ collection.name }}">
+                            {% else %}
+                            <div class="no-image">
+                                <i class="fas fa-layer-group fa-3x text-muted"></i>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="card-body d-flex flex-column flex-grow-1">
+                            <h5 class="card-title fw-bold mb-2">{{ collection.name }}</h5>
+                            {% if collection.description %}
+                            <p class="collection-desc text-muted small mb-3">{{ collection.description }}</p>
+                            {% endif %}
+                            <div class="mt-auto">
+                                <span class="premium-badge">
+                                    <i class="fas fa-cubes text-info"></i> {{ cprojects|length }} Projects
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% empty %}
+                <div class="col-12 animate-enter" style="animation-delay: 200ms;">
+                    <div class="empty-state-dashed">
+                        <i class="fas fa-layer-group empty-icon"></i>
+                        <h3 class="fw-bold">No collections yet</h3>
+                        <p class="text-muted mb-4">Group related projects together to keep your workspace organized.</p>
+                        <button type="button" class="btn btn-primary px-4 py-2" data-bs-toggle="modal" data-bs-target="#newCollectionModal" style="border-radius: 10px;">
+                            <i class="fas fa-plus me-2"></i> Create Collection
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Selected collection view -->
+            <div id="selectedCollectionView" style="display: none;">
+                <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+                    <div>
+                        <h3 class="fw-bold mb-0" id="selectedCollectionName"></h3>
+                        <p class="text-muted small mb-0" id="selectedCollectionDescription"></p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" id="editCollectionBtn" style="border-radius: 10px;">
+                            <i class="fas fa-edit me-1"></i>Edit
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" id="deleteCollectionBtn" style="border-radius: 10px;">
+                            <i class="fas fa-trash me-1"></i>Delete
+                        </button>
+                    </div>
+                </div>
+                {% for collection in collections %}
+                <div class="collection-grid d-none"
+                     data-collection-id="{{ collection.id }}"
+                     data-title="{{ collection.name }}"
+                     data-desc="{{ collection.description }}"
+                     data-cover="{{ collection.cover_project_id|default_if_none:'' }}">
+                    {% with cprojects=collection.projects.all %}
+                    {% if cprojects %}
+                    <div class="row g-4">
+                        {% for project in cprojects %}
+                        {% include 'projects/_project_card.html' with project=project card_delay="{{ forloop.counter }}00" collection_id=collection.id %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="empty-state-dashed" style="padding: 2rem;">
+                        <i class="fas fa-cube empty-icon"></i>
+                        <p class="text-muted mb-0">No projects in this collection yet. Select projects on the <strong>All Projects</strong> tab and use <strong>Add to collection</strong>.</p>
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
     </div>
-    
+
     <!-- No Results Message -->
     <div class="no-results animate-enter" id="noResults" style="display: none; animation-delay: 0ms;">
         <div class="empty-state-dashed mx-auto" style="max-width: 600px;">
             <i class="fas fa-search empty-icon"></i>
             <h3 class="fw-bold">No matches found</h3>
-            <p class="text-muted mb-4">We couldn't find any projects matching your search query.</p>
+            <p class="text-muted mb-4">We couldn't find any projects or collections matching your search query.</p>
             <button class="btn btn-outline-secondary px-4 py-2" id="resetSearch" style="border-radius: 10px;">
                 <i class="fas fa-undo me-2"></i> Clear Search
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Action Bar (project selection) -->
+<div class="bulk-action-bar" id="bulkActionBar">
+    <span class="fw-bold text-light" id="bulkSelectionCount">0 selected</span>
+    <div class="dropdown">
+        <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 10px;">
+            <i class="fas fa-layer-group me-1"></i>Add to collection
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow border-secondary bg-dark" id="addToCollectionMenu">
+            {% for collection in collections %}
+            <li><a class="dropdown-item" href="#" data-collection-id="{{ collection.id }}">{{ collection.name }}</a></li>
+            {% endfor %}
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item text-primary fw-bold" href="#" id="newCollectionFromSelection"><i class="fas fa-plus me-1"></i>New collection…</a></li>
+        </ul>
+    </div>
+    <button type="button" class="btn btn-outline-secondary" id="clearSelection" style="border-radius: 10px;">Clear</button>
+</div>
+
+<!-- New Collection Modal -->
+<div class="modal fade" id="newCollectionModal" tabindex="-1" aria-labelledby="newCollectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+            <div class="modal-header border-bottom border-dark">
+                <h5 class="modal-title fw-bold" id="newCollectionModalLabel">Create New Collection</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="newCollectionForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="newCollectionName" class="form-label fw-bold">Name</label>
+                        <input type="text" class="form-control" id="newCollectionName" maxlength="100" required placeholder="e.g. Living Room Set">
+                    </div>
+                    <div class="mb-2">
+                        <label for="newCollectionDescription" class="form-label fw-bold">Description <span class="text-muted fw-normal">(optional)</span></label>
+                        <textarea class="form-control" id="newCollectionDescription" rows="3" placeholder="What belongs in this collection?"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-dark">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Create Collection</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Collection Modal -->
+<div class="modal fade" id="editCollectionModal" tabindex="-1" aria-labelledby="editCollectionModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+            <div class="modal-header border-bottom border-dark">
+                <h5 class="modal-title fw-bold" id="editCollectionModalLabel">Edit Collection</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editCollectionForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="editCollectionName" class="form-label fw-bold">Name</label>
+                        <input type="text" class="form-control" id="editCollectionName" maxlength="100" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editCollectionDescription" class="form-label fw-bold">Description <span class="text-muted fw-normal">(optional)</span></label>
+                        <textarea class="form-control" id="editCollectionDescription" rows="3"></textarea>
+                    </div>
+                    <div class="mb-2">
+                        <label for="editCollectionCover" class="form-label fw-bold">Cover Project <span class="text-muted fw-normal">(optional — card art)</span></label>
+                        <select class="form-select" id="editCollectionCover">
+                            <option value="">Auto (first project's image)</option>
+                            {% for project in projects %}
+                            <option value="{{ project.id }}">{{ project.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-dark">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-check me-1"></i>Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -181,51 +452,95 @@
 {% block extra_js %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const CSRF = '{{ csrf_token }}';
         const searchInput = document.getElementById('projectSearch');
         const clearButton = document.getElementById('clearSearch');
-        const projectCards = document.querySelectorAll('.project-card');
-        const projectsContainer = document.getElementById('projectsContainer');
         const noResults = document.getElementById('noResults');
         const resetButton = document.getElementById('resetSearch');
-        
-        // Function to filter projects
-        function filterProjects() {
-            const searchTerm = searchInput.value.toLowerCase().trim();
-            let matchCount = 0;
-            
-            // Show or hide clear button
-            if (searchTerm.length > 0) {
-                clearButton.style.display = 'block';
-            } else {
-                clearButton.style.display = 'none';
-            }
-            
-            // Filter projects
-            projectCards.forEach(card => {
-                const name = card.dataset.name || '';
-                const description = card.dataset.description || '';
-                const tags = card.dataset.tags || '';
-                const files = card.dataset.files || '';
-                
-                const isMatch = name.includes(searchTerm) || 
-                    description.includes(searchTerm) || 
-                    tags.includes(searchTerm) ||
-                    files.includes(searchTerm);
-                
-                if (isMatch) {
-                    matchCount++;
-                    if ($(card).is(':hidden')) {
-                        $(card).removeClass('animate-enter').stop(true, false).fadeIn(200);
+        const bulkBar = document.getElementById('bulkActionBar');
+
+        let selectedCollectionId = null;
+        let editCollectionId = null;
+        let pendingProjectIds = [];
+
+        function postJSON(url, data) {
+            $.ajax({
+                url: url,
+                method: 'POST',
+                data: JSON.stringify(data),
+                contentType: 'application/json',
+                headers: { 'X-CSRFToken': CSRF },
+                success: function(response) {
+                    if (response.status === 'success') {
+                        location.reload();
+                    } else {
+                        alert('Error: ' + response.message);
                     }
-                } else {
-                    if ($(card).is(':visible')) {
-                        $(card).removeClass('animate-enter').stop(true, false).fadeOut(200);
-                    }
+                },
+                error: function(xhr) {
+                    alert('Error. Please try again.');
                 }
             });
-            
-            // Show or hide no results message
-            if (matchCount === 0 && searchTerm.length > 0) {
+        }
+
+        function activePane() {
+            const active = document.querySelector('#index-tabs .nav-link.active');
+            return active ? active.getAttribute('data-bs-target') : '#all-projects-tab';
+        }
+
+        // ----- Search (scoped to the active tab) -----
+        function cardMatches(card, term) {
+            const name = $(card).data('name') || '';
+            const description = $(card).data('description') || '';
+            const tags = $(card).data('tags') || '';
+            const files = $(card).data('files') || '';
+            return name.includes(term) ||
+                description.includes(term) ||
+                tags.includes(term) ||
+                files.includes(term);
+        }
+
+        function filterProjects() {
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            clearButton.style.display = searchTerm.length > 0 ? 'block' : 'none';
+
+            let matchCount = 0;
+            let cardCount = 0;
+
+            if (activePane() === '#all-projects-tab') {
+                $('#all-projects-tab .project-card').each(function() {
+                    cardCount++;
+                    const isMatch = !searchTerm || cardMatches(this, searchTerm);
+                    if (isMatch) {
+                        matchCount++;
+                        if ($(this).is(':hidden')) {
+                            $(this).removeClass('animate-enter').stop(true, false).fadeIn(200);
+                        }
+                    } else {
+                        if ($(this).is(':visible')) {
+                            $(this).removeClass('animate-enter').stop(true, false).fadeOut(200);
+                        }
+                    }
+                });
+            } else {
+                $('#collectionCardsRow .collection-card').each(function() {
+                    cardCount++;
+                    const isMatch = !searchTerm || cardMatches(this, searchTerm);
+                    if (isMatch) {
+                        matchCount++;
+                        if ($(this).is(':hidden')) {
+                            $(this).removeClass('animate-enter').stop(true, false).fadeIn(200);
+                        }
+                    } else {
+                        if ($(this).is(':visible')) {
+                            $(this).removeClass('animate-enter').stop(true, false).fadeOut(200);
+                        }
+                    }
+                });
+            }
+
+            const showNoResults = searchTerm.length > 0 && cardCount > 0 && matchCount === 0;
+            if (showNoResults) {
                 if ($(noResults).is(':hidden')) {
                     $(noResults).removeClass('animate-enter').stop(true, false).fadeIn(200);
                 }
@@ -235,24 +550,165 @@
                 }
             }
         }
-        
-        // Event listeners
+
         searchInput.addEventListener('input', filterProjects);
-        
         clearButton.addEventListener('click', function() {
             searchInput.value = '';
             filterProjects();
             searchInput.focus();
         });
-        
         resetButton.addEventListener('click', function() {
             searchInput.value = '';
             filterProjects();
             searchInput.focus();
         });
-        
+        $('#index-tabs').on('shown.bs.tab', 'button.nav-link', function() {
+            filterProjects();
+        });
+
+        // ----- Bulk selection (All Projects tab) -----
+        function getSelectedIds() {
+            return $('.project-select:checked').map(function() {
+                return $(this).data('project-id');
+            }).get();
+        }
+
+        function refreshBulkBar() {
+            const count = $('.project-select:checked').length;
+            $('#bulkSelectionCount').text(count + ' selected');
+            bulkBar.classList.toggle('visible', count > 0);
+        }
+
+        $(document).on('change', '.project-select', function() {
+            $(this).closest('.project-card').toggleClass('is-selected', this.checked);
+            refreshBulkBar();
+        });
+
+        $('#clearSelection').on('click', function() {
+            $('.project-select').prop('checked', false);
+            $('.project-card.is-selected').removeClass('is-selected');
+            refreshBulkBar();
+        });
+
+        $('#addToCollectionMenu').on('click', 'a[data-collection-id]', function(e) {
+            e.preventDefault();
+            const ids = getSelectedIds();
+            if (ids.length === 0) return;
+            postJSON(`/collections/${$(this).data('collection-id')}/add-projects/`, { project_ids: ids });
+        });
+
+        $('#newCollectionFromSelection').on('click', function(e) {
+            e.preventDefault();
+            pendingProjectIds = getSelectedIds();
+            if (pendingProjectIds.length === 0) return;
+            openNewCollectionModal();
+        });
+
+        // ----- New collection modal -----
+        function openNewCollectionModal() {
+            $('#newCollectionForm')[0].reset();
+            const note = pendingProjectIds.length > 0
+                ? `The ${pendingProjectIds.length} selected project(s) will be added to this collection.`
+                : '';
+            $('#newCollectionModalLabel').text(pendingProjectIds.length > 0 ? 'New Collection (from selection)' : 'Create New Collection');
+            if (note) {
+                if ($('#newCollectionNote').length === 0) {
+                    $('<div id="newCollectionNote" class="alert alert-info py-2 small"></div>').prependTo('#newCollectionForm .modal-body');
+                }
+                $('#newCollectionNote').text(note).show();
+            } else {
+                $('#newCollectionNote').hide().remove();
+            }
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('newCollectionModal')).show();
+        }
+
+        $('#newCollectionForm').on('submit', function(e) {
+            e.preventDefault();
+            const name = $('#newCollectionName').val().trim();
+            if (!name) {
+                alert('Please enter a collection name.');
+                return;
+            }
+            const data = {
+                name: name,
+                description: $('#newCollectionDescription').val().trim()
+            };
+            if (pendingProjectIds.length > 0) {
+                data.project_ids = pendingProjectIds;
+            }
+            postJSON('{% url "projects:collection_create" %}', data);
+        });
+
+        // ----- Collection card selection -----
+        $('#collectionCardsRow').on('click', '.collection-card', function() {
+            const id = $(this).data('collection-id');
+            if (selectedCollectionId === id) {
+                deselectCollection();
+                return;
+            }
+            selectedCollectionId = id;
+            $('.collection-card').removeClass('selected-collection');
+            $(this).addClass('selected-collection');
+            const $grid = $(`.collection-grid[data-collection-id="${id}"]`);
+            $('.collection-grid').addClass('d-none');
+            $grid.removeClass('d-none');
+            $('#selectedCollectionName').text($grid.data('title'));
+            $('#selectedCollectionDescription').text($grid.data('desc') || '');
+            $('#selectedCollectionView').css('display', 'block');
+        });
+
+        function deselectCollection() {
+            selectedCollectionId = null;
+            $('.collection-card').removeClass('selected-collection');
+            $('.collection-grid').addClass('d-none');
+            $('#selectedCollectionView').css('display', 'none');
+        }
+
+        // ----- Edit / delete collection -----
+        $('#editCollectionBtn').on('click', function() {
+            if (selectedCollectionId === null) return;
+            const $grid = $(`.collection-grid[data-collection-id="${selectedCollectionId}"]`);
+            editCollectionId = selectedCollectionId;
+            $('#editCollectionName').val($grid.data('title'));
+            $('#editCollectionDescription').val($grid.data('desc') || '');
+            $('#editCollectionCover').val($grid.data('cover') || '');
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('editCollectionModal')).show();
+        });
+
+        $('#editCollectionForm').on('submit', function(e) {
+            e.preventDefault();
+            if (editCollectionId === null) return;
+            const name = $('#editCollectionName').val().trim();
+            if (!name) {
+                alert('Please enter a collection name.');
+                return;
+            }
+            postJSON(`/collections/${editCollectionId}/update/`, {
+                name: name,
+                description: $('#editCollectionDescription').val().trim(),
+                cover_project_id: $('#editCollectionCover').val() || null
+            });
+        });
+
+        $('#deleteCollectionBtn').on('click', function() {
+            if (selectedCollectionId === null) return;
+            const $grid = $(`.collection-grid[data-collection-id="${selectedCollectionId}"]`);
+            if (!confirm(`Delete collection "${$grid.data('title')}"? Projects inside it are not deleted.`)) return;
+            postJSON(`/collections/${selectedCollectionId}/delete/`, {});
+        });
+
+        // ----- Remove project from collection (per card) -----
+        $(document).on('click', '.project-remove-btn', function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            if (!confirm('Remove this project from the collection?')) return;
+            postJSON(`/collections/${$btn.data('collection-id')}/remove-project/`, {
+                project_id: $btn.data('project-id')
+            });
+        });
+
         // Initialize (in case there's a value already)
         filterProjects();
     });
 </script>
-{% endblock %} 
+{% endblock %}

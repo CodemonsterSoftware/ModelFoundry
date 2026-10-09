@@ -1,0 +1,59 @@
+{% comment %}Project card. Context: project, card_delay (ms), collection_id (optional — renders remove button in collection context){% endcomment %}
+<div class="col-md-6 col-lg-4 col-xl-3 project-card animate-enter position-relative"
+     style="animation-delay: {{ card_delay|default:'0' }}ms;"
+     data-name="{{ project.name|lower }}"
+     data-description="{{ project.description|lower }}"
+     data-tags="{% for tag in project.tags.all %}{{ tag.name|lower }} {% endfor %}"
+     data-files="{% for image in project.images.all %}{{ image.image.name|lower }} {% endfor %}"
+     {% if collection_id %}data-collection-id="{{ collection_id }}" data-project-id="{{ project.id }}"{% endif %}>
+    <div class="card h-100 premium-card hover-effect">
+        <a href="{% url 'projects:project_detail' project.pk %}" class="card-link d-flex flex-column h-100">
+            <div class="project-image-container border-bottom border-dark">
+                {% if project.images.first %}
+                <img src="{{ project.images.first.image_thumbnail.url }}" alt="{{ project.name }}">
+                {% else %}
+                <div class="no-image">
+                    <i class="fas fa-cube fa-3x text-muted"></i>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body d-flex flex-column flex-grow-1">
+                <h5 class="card-title fw-bold mb-3">{{ project.name }}</h5>
+
+                <div class="mb-3">
+                    <span class="premium-badge">
+                        <i class="fas fa-cube text-info"></i> {{ project.total_parts }} Parts
+                    </span>
+                    <span class="premium-badge">
+                        {% if project.progress_percentage == 100 %}
+                        <i class="fas fa-check-circle text-success"></i> 100% Complete
+                        {% elif project.progress_percentage > 0 %}
+                        <i class="fas fa-tasks text-warning"></i> {{ project.progress_percentage }}% Complete
+                        {% else %}
+                        <i class="fas fa-hourglass-start text-muted"></i> 0% Complete
+                        {% endif %}
+                    </span>
+                </div>
+
+                {% if project.tags.all %}
+                <div class="mt-auto pt-2 d-flex flex-wrap gap-2">
+                    {% for tag in project.tags.all %}
+                        <span class="premium-badge" style="background-color: var(--bg-darker); border-color: var(--border-dark);">
+                            <i class="fas fa-tag text-primary"></i> {{ tag.name }}
+                        </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </a>
+        {% if not collection_id %}
+        <label class="project-select-wrap" title="Select for bulk actions">
+            <input type="checkbox" class="project-select" data-project-id="{{ project.id }}">
+        </label>
+        {% else %}
+        <button type="button" class="project-remove-btn" data-collection-id="{{ collection_id }}" data-project-id="{{ project.id }}" title="Remove from collection">
+            <i class="fas fa-times"></i>
+        </button>
+        {% endif %}
+    </div>
+</div>

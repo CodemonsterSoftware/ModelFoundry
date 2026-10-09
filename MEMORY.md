@@ -39,7 +39,16 @@ Persistent context for AI sessions. Keep this file updated when making key decis
 - **User decision: Add Parts mirror pairs SPLIT the row's quantity across both parts** (total preserved: 2→1+1, 3→2+1; a single piece can't be halved → 1+1). Implemented in `_create_part_rows` (shared by `parts_create` + legacy `add_multiple_parts`). The manual `copy_mirror_part` view and retroactive smart-parsing mirror pass still copy the FULL quantity (explicit user actions, not auto-detection).
 - Frontend auto-pair rule: dropping only one of `part (Left).stl` / `part (Right).stl` auto-checks the mirror toggle; if both are dropped, both are real parts and any earlier auto-check is reverted. Manual toggles (`data-autoMirror` unset) are never auto-reverted.
 - **ZIP drop support on Add Parts** (`add_parts.html`, frontend-only): `.zip` files are extracted client-side with fflate, **vendored locally at `projects/static/projects/js/fflate.min.js`** (v0.8.0 UMD; served via `{% static %}` — deliberately NOT CDN so it works when the browser can't reach jsdelivr; `project_detail.html` still loads the same version from CDN for three.js's 3MFLoader). Only stl/obj/3mf entries become rows; folder paths stripped to basename, nested zips count as skipped; each entry flows through the normal `addRowFromFile` path (smart import + two-phase chunked upload unchanged). No backend changes. **User decision: no success alert** — rows appearing is the feedback; only errors alert (missing fflate global, corrupt/unreadable zip with `err.message` surfaced e.g. "invalid zip data", or a zip with zero 3D entries). **Gotcha: fflate's async `unzip` is callback-only — it does NOT return a Promise** (calling it without a callback throws fflate error 7 "no callback"); wrap in a Promise in `extractZipFile`. Verified end-to-end via Node against the vendored build.
-- `import_project` body lives in `@transaction.atomic _import_project_data(project_data, temp_dir, user)` (views.py) — mid-import failure rolls back.
+- `import_project` body lives in `@transaction.atomic _import_project_data(project_data, temp_dir, user, on_progress=None)` (views.py) — mid-import failure rolls back.
+
+## Async Project Import with Progress (added this session)
+- **Why:** import was one long synchronous request (zip extract + per-part STL volume calc) — no feedback, felt stuck.
+- **Dual-mode `import_project` POST:** AJAX (`X-Requested-With: XMLHttpRequest`) → async; anything else keeps the old sync 302 behavior (existing tests/curl unaffected).
+- **Async path** (`_start_async_import`): persist upload to disk (`temporary_file_path()` or mkstemp spool), fast-fail validation in-request (zip opens + `manifest.json` JSON-parses → else JSON 400, same messages as sync), `progress.create_task`, spawn worker via `_start_import_worker(task_id, zip_path, user)` (separate fn so tests can patch it), return `{status, task_id}` immediately.
+- **Worker** (`_run_import_task`, daemon thread): extract per-file with counter (0-15%) → read manifest (15-20%) → `_import_project_data(..., on_progress=cb)` reports phases `setup` (20-30), `parts` (30-90, per-part incl. volume calc — the slow stage), `finalize` (90-100) → `progress.finish(task_id, True, redirect_url=project_detail URL)`; on exception → log + `progress.finish(task_id, False, error=str(e))`; finally removes temp dir + zip.
+- **progress.py generic-task additions** (backward-compatible): task dict gains `percent_override`/`error`/`redirect_url`; `update_task(..., percent=NN)` sets override (import phases aren't upload/thumbnails/volumes where get_task's math returns 0); `finish(task_id, success, error, redirect_url)`; `get_task()` passes `error`+`redirect_url` through, uses `percent_override` when set, done+error → percent 0.
+- **Frontend** (`import_project.html`): form submit intercepted → FormData AJAX (CSRF header) → progress modal (same `.upload-progress-modal` style/stepper as add_parts; 5 rows: Extract/Manifest/Project & Materials/Parts/Finalize) → polls existing `/api/upload-progress/<task_id>/` every 500ms. Done: `error` → footer message + Close (retry); else redirect to `redirect_url` after 800ms. 15-min safety timeout like add_parts.
+- **Test gotcha:** worker thread opens its own DB connection → "database table is locked" against the SQLite test transaction. Tests patch `projects.views._start_import_worker` with a side-effect that runs `_run_import_task` INLINE (same pattern as patching `dispatch_pipeline`) — see `ImportProgressTests`.
 - Dead code removed: `upload_files` view + URL + `BulkUploadForm` (broken bulk ZIP upload, superseded by Add Parts).
 
 ## Project Default Material (added this session)
@@ -84,6 +93,34 @@ Persistent context for AI sessions. Keep this file updated when making key decis
 - **User decision (scope): Add Parts page only.** The retroactive "Apply Smart Parsing" button and the manifest-import fallback (`resolve_manifest_quantity`) are deliberately NOT gated — explicit user action / separate flow. A manually checked mirror toggle is also never gated (submit-time pairing logic runs regardless of the setting).
 - **Pre-existing bug fixed in passing:** settings.html referenced `general_settings` but the view context never included it (only appearance/api/system) → General tab select states silently reset on reload. Now passes `'general_settings': forms.get('general', {})`.
 
+## Price Decimal Fix (added this session)
+- User report: prices in the material manager "sometimes save as binary approximations."
+- Investigation result: **storage was always exact** — `Material.cost`/`PurchasedPart.price` are DecimalFields; MaterialForm posts strings (exact string→Decimal). Verified end-to-end via test client. On SQLite values physically round-trip as REAL (NUMERIC affinity converts text to float on write), but Django's read converter (`prec=15` + quantize) restores exact 2-dp values for every value allowed by `max_digits=10`. Postgres stores exact numerics.
+- The real visible bug: `material_list.html` rendered `cost_per_kg` UNFORMATTED — Decimal division at default context prec=28 → repeating decimals shown as 28-digit numbers (e.g. cost=24.99, weight=888 → `$28.14189189189189189189189189/kg`). Fixed with `|floatformat:2`. `cost_per_kg` property itself stays full-precision (used in cost calcs).
+- Hardened `update_purchased_part` (views.py): price parsed as `Decimal(...)` not `float(...)`; `InvalidOperation` added to the 400 handler.
+
+## Shell + Infill Material Cost Method (added this session)
+- **Why:** Volume calculation matched slicers (Bambu Lab) geometrically, but material cost was ~4× higher because ModelFoundry previously assumed 100% solid plastic (`mass = volume * density`). Real FDM prints use a thin solid shell and sparse infill (~15–20%), meaning actual printed plastic is only ~20–25% of solid volume.
+- **Model & Pipeline (`projects/models.py`, `projects/volume.py`):**
+  - Added `Part.surface_area` (Float, mm²) via migration `0033_part_surface_area`.
+  - `compute_mesh_stats(file_path) -> (volume, surface_area)` replaces single-stat compute; `numpy-stl` uses `m.areas.sum()` and `trimesh` uses `mesh_data.area` (essentially zero CPU overhead).
+  - Background pipeline (`_run_volume_phase`) and `Part.calculate_volume()` compute and persist both `volume` and `surface_area`.
+  - `Part.effective_volume`: $\text{Shell} = \min(V, A \times 1.2\text{mm})$, $\text{Core} = V - \text{Shell}$, $\text{Printed} = \text{Shell} + (\text{Core} \times 0.15)$.
+  - `Part.material_cost`: Prioritizes exact slicer weight (`filament_weight_g`), falls back to Shell + Infill effective volume $\times$ density if `surface_area` exists, falls back to legacy solid volume if absent.
+  - `Material.total_used`: Uses `filament_weight_g` if present, else Shell + Infill, and excludes parents (`sub_parts__isnull=True`) to avoid double counting 3MFs.
+  - `project_calculate_volumes` (views.py): queries `parts.exclude(stl_file='')` so the "Calculate Volumes" button in Process STL dropdown recalculates and upgrades all parts in the project to include surface area and realistic costs.
+  - UI (`project_detail.html`): Part Details modal shows live basis tag (`15% infill estimate` vs `{N}g (slicer)`).
+  - Tests: `ShellInfillCostTests` (6 tests in `projects/tests.py`).
+
+## Collections (added this session)
+- `Collection` model (migration `0034_collection.py`): **global — no user FK** (user decision; index already shows all projects regardless of owner). `name`, `description`, `cover_project` FK (SET_NULL), M2M `projects`. `cover_image` property: cover project's first image → first member's first image → None.
+- UI (`project_list.html`): two `nav-pills` tabs under hero — **All Projects** / **Collections** (insights.html tab pattern). Search is scoped to the active tab (projects by name/desc/tags/files; collections by name/desc).
+- Membership: hover checkbox on each project card (All tab) → floating `.bulk-action-bar` (same style as project_detail's) with "Add to collection" dropdown + "New collection…" (opens create modal carrying the selection). Remove = ✕ button on cards inside a collection view. **Add-only semantics — never set/replace**, so unselected members survive.
+- Collections tab: collection cards (art via `cover_image`, name, 2-line clamped description, N Projects badge); click card → selected state + its project grid below (server-rendered sub-grid per collection, JS-toggled; click again to deselect). Edit modal (name/description/cover-project select) + Delete (confirm()).
+- Project card markup extracted to `projects/templates/projects/_project_card.html` partial (context: `project`, `card_delay`, optional `collection_id`) — used by both main grid and collection grids. Don't duplicate the card markup elsewhere.
+- Endpoints (JSON POST, `{status,message}`, 404 lookups OUTSIDE try per repo convention): `collections/create/` (optional `project_ids`), `collections/<pk>/update/` (`cover_project_id: null` clears cover), `collections/<pk>/delete/`, `collections/<pk>/add-projects/` (idempotent), `collections/<pk>/remove-project/`.
+- **Django gotcha:** there is NO `multiply` template filter — compute delays via string concat, e.g. `card_delay="{{ forloop.counter|add:1 }}00"`.
+
 ## Locked User Decisions (do not re-litigate)
 - Quantity parsing: conservative patterns only; no `(N)` support.
 - Mirror behavior: share STL file, no mesh flip.
@@ -91,9 +128,12 @@ Persistent context for AI sessions. Keep this file updated when making key decis
 - 3MF export: remaining copies only (`quantity - completed`); entry point in bulk action bar only (no per-part / export-all); auto row layout with gaps (user still arranges in slicer).
 - Retroactive smart parsing: clean part names when the token is found (consistent with new uploads); only touch parts whose quantity is still 1 (manual quantities always win); entry point = Process STL dropdown option on project detail page.
 - Auto name parsing toggle: Add Parts page only (retroactive button + import fallback stay ungated); defaults ON.
+- Material cost: Shell + Infill geometry method (1.2mm walls, 15% infill) for raw STLs; exact slicer weight takes precedence when present.
+- Collections: global (no user FK); membership managed via bulk-select on All Projects tab + per-card ✕ in collection view; cover art = project picker with fallback to first member's image (no image upload).
 
 ## Conventions
 - Views return JSON `{status: 'success'|'error', message?}` for AJAX endpoints; redirects + messages for full-page flows.
 - Templates: Bootstrap 5 + Font Awesome + jQuery, dark theme (`premium-card`, `--bg-dark` etc.); Django template tags inline in JS via `{{ ... }}`.
-- Tests live in `projects/tests.py`; existing classes: `ViewTests`, `ModelTests`, `ProjectActionTests`, `SmartImportParserTests` (SimpleTestCase), `AddMultiplePartsMirrorTests`, `PartsTwoPhaseUploadTests`, `ProgressChunkedUploadTests`, `ProjectDefaultMaterialTests`, `Export3MFTests`, `ApplySmartParsingTests`, `AutoNameParsingSettingTests`. 106 tests total.
-- Working tree note: smart import + default material + 3MF export changes are uncommitted (along with earlier session work in `volume.py`, `project_detail.html`, `settings.py`, `blender_service/Dockerfile`).
+- Tests live in `projects/tests.py`; existing classes: `ViewTests`, `ModelTests`, `ProjectActionTests`, `SmartImportParserTests` (SimpleTestCase), `AddMultiplePartsMirrorTests`, `PartsTwoPhaseUploadTests`, `ProgressChunkedUploadTests`, `ProjectDefaultMaterialTests`, `Export3MFTests`, `ApplySmartParsingTests`, `AutoNameParsingSettingTests`, `ShellInfillCostTests`, `CollectionTests`, `ImportProgressTests`. 135 tests total.
+- Working tree note: smart import + default material + 3MF export + shell/infill pricing changes are uncommitted.
+

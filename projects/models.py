@@ -99,6 +99,32 @@ class Project(models.Model):
     def __str__(self):
         return self.name
 
+class Collection(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    cover_project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name='cover_for_collections')
+    projects = models.ManyToManyField(Project, blank=True, related_name='collections')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def cover_image(self):
+        """First image of the cover project, else first image of the first member."""
+        if self.cover_project:
+            first = self.cover_project.images.first()
+            if first:
+                return first
+        first_member = self.projects.order_by('created_at').first()
+        if first_member:
+            return first_member.images.first()
+        return None
+
+    class Meta:
+        ordering = ['name']
+
 class Group(models.Model):
     name = models.CharField(max_length=200)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='groups')
@@ -167,21 +193,28 @@ class Material(models.Model):
     @property
     def total_used(self):
         """Calculate total material used in grams based on completed parts and density"""
-        total_volume = Decimal('0')
+        total_mass = Decimal('0')
         
-        # Get all completed parts that use this material
-        completed_parts = Part.objects.filter(material=self, completed__gt=0)
+        # Get all completed parts that use this material (exclude parent parts that have sub-parts)
+        completed_parts = Part.objects.filter(material=self, completed__gt=0, sub_parts__isnull=True)
         
         for part in completed_parts:
-            if part.volume:
-                # Convert volume from mm³ to cm³ (divide by 1000)
-                volume_cm3 = Decimal(str(part.volume)) / Decimal('1000')
-                total_volume += volume_cm3 * part.completed
+            if part.filament_weight_g is not None and part.filament_weight_g > 0:
+                total_mass += Decimal(str(part.filament_weight_g)) * part.completed
+            elif part.volume:
+                vol_mm3 = Decimal(str(part.volume))
+                if part.surface_area:
+                    area_mm2 = Decimal(str(part.surface_area))
+                    shell_vol = min(vol_mm3, area_mm2 * Part.DEFAULT_WALL_THICKNESS_MM)
+                    core_vol = max(Decimal('0'), vol_mm3 - shell_vol)
+                    printed_vol_mm3 = shell_vol + (core_vol * Part.DEFAULT_INFILL_RATIO)
+                    volume_cm3 = printed_vol_mm3 / Decimal('1000')
+                else:
+                    volume_cm3 = vol_mm3 / Decimal('1000')
+                if self.density:
+                    total_mass += volume_cm3 * self.density * part.completed
         
-        # Convert volume to grams using density
-        if self.density and total_volume:
-            return total_volume * self.density
-        return Decimal('0')
+        return total_mass
 
     def __str__(self):
         return f"{self.name} ({self.get_type_display()})"
@@ -210,6 +243,7 @@ class Part(models.Model):
                                       format='JPEG',
                                       options={'quality': 85})
     volume = models.FloatField(null=True, blank=True, help_text="Volume in cubic millimeters")
+    surface_area = models.FloatField(null=True, blank=True, help_text="Surface area in square millimeters")
     
     # Slicer Integration Fields
     print_time_seconds = models.IntegerField(null=True, blank=True, help_text="Total print time for one copy in seconds")
@@ -223,34 +257,63 @@ class Part(models.Model):
     ]
     print_status = models.CharField(max_length=20, choices=PRINT_STATUS_CHOICES, default='pending')
 
+    # Standard FDM slicing defaults for geometry-based material estimation
+    DEFAULT_WALL_THICKNESS_MM = Decimal('1.2')  # ~3 perimeters at 0.4mm nozzle / 6 top-bottom layers
+    DEFAULT_INFILL_RATIO = Decimal('0.15')      # 15% standard infill
+
     def __str__(self):
         return self.name
+
+    @property
+    def effective_volume(self):
+        """
+        Calculate estimated printed volume in mm³ using the Shell + Infill model:
+        - Shell volume = min(Volume, Surface Area * 1.2 mm wall thickness)
+        - Core volume = max(0, Volume - Shell volume)
+        - Printed volume = Shell volume + (Core volume * 15% infill)
+        """
+        if not self.volume:
+            return None
+        if self.surface_area:
+            vol_mm3 = Decimal(str(self.volume))
+            area_mm2 = Decimal(str(self.surface_area))
+            shell_vol = min(vol_mm3, area_mm2 * self.DEFAULT_WALL_THICKNESS_MM)
+            core_vol = max(Decimal('0'), vol_mm3 - shell_vol)
+            return float(shell_vol + (core_vol * self.DEFAULT_INFILL_RATIO))
+        return self.volume
 
     @property
     def material_cost(self):
         """
         Calculate the material cost for this part.
         
-        Units:
-        - Volume: stored in mm³, converted to cm³ (divide by 1000)
-        - Density: stored in g/cm³
-        - Cost: stored in $/kg
-        
-        Calculation steps:
-        1. Convert volume from mm³ to cm³ (divide by 1000)
-        2. Calculate mass in grams: volume_cm³ × density_g/cm³
-        3. Convert mass to kg (divide by 1000)
-        4. Calculate cost: mass_kg × cost_$/kg
+        Priority:
+        1. Exact sliced weight (filament_weight_g) if available.
+        2. Shell + Infill geometry approximation if surface_area is available:
+           - Shell volume: surface_area × 1.2mm (capped at total volume)
+           - Core volume: (total volume - shell volume) × 15% infill
+           - Mass: printed volume (cm³) × density (g/cm³)
+        3. Fallback: Solid volume × density.
         """
-        if not self.volume or not self.material:
+        if not self.material:
             return None
             
         try:
-            # Convert volume from mm³ to cm³ (1 cm³ = 1000 mm³)
-            volume_cm3 = Decimal(str(self.volume)) / Decimal('1000')
-            
-            # Calculate mass in grams: volume (cm³) × density (g/cm³)
-            mass_g = volume_cm3 * self.material.density
+            if self.filament_weight_g is not None and self.filament_weight_g > 0:
+                mass_g = Decimal(str(self.filament_weight_g))
+            elif self.volume:
+                vol_mm3 = Decimal(str(self.volume))
+                if self.surface_area:
+                    area_mm2 = Decimal(str(self.surface_area))
+                    shell_vol = min(vol_mm3, area_mm2 * self.DEFAULT_WALL_THICKNESS_MM)
+                    core_vol = max(Decimal('0'), vol_mm3 - shell_vol)
+                    printed_vol_mm3 = shell_vol + (core_vol * self.DEFAULT_INFILL_RATIO)
+                    volume_cm3 = printed_vol_mm3 / Decimal('1000')
+                else:
+                    volume_cm3 = vol_mm3 / Decimal('1000')
+                mass_g = volume_cm3 * self.material.density
+            else:
+                return None
             
             # Convert mass to kg (1 kg = 1000 g) and calculate cost
             mass_kg = mass_g / Decimal('1000')
@@ -261,10 +324,11 @@ class Part(models.Model):
             return None
 
     def calculate_volume(self):
-        """Calculate the volume of the 3D file in cubic millimeters.
+        """Calculate the volume and surface area of the 3D file in cubic millimeters.
         
         Uses numpy-stl for STL files (fast vectorized path) and falls
         back to trimesh for other formats (OBJ, etc.).
+        Also populates self.surface_area when available.
         """
         if not self.stl_file:
             print(f"No 3D file for part {self.name}")
@@ -278,12 +342,15 @@ class Part(models.Model):
                 print(f"File not found at path: {file_path}")
                 return None
 
-            from projects.volume import compute_volume
-            volume_mm3 = compute_volume(file_path)
+            from projects.volume import compute_mesh_stats
+            stats = compute_mesh_stats(file_path)
             
-            if volume_mm3 is not None:
-                print(f"Volume calculated for {self.name}: {volume_mm3} mm³")
-            return volume_mm3
+            if stats is not None:
+                volume_mm3, surface_area_mm2 = stats
+                self.surface_area = surface_area_mm2
+                print(f"Volume calculated for {self.name}: {volume_mm3} mm³, area: {surface_area_mm2} mm²")
+                return volume_mm3
+            return None
             
         except Exception as e:
             print(f"Error calculating volume for part {self.name}: {str(e)}")
@@ -294,9 +361,11 @@ class Part(models.Model):
         # _skip_volume flag allows bulk uploads to defer volume calc
         # to a background ProcessPoolExecutor for parallelism
         skip_volume = getattr(self, '_skip_volume', False)
-        if not skip_volume and self.stl_file and (not self.volume or self._state.adding):
+        if not skip_volume and self.stl_file and (not self.volume or not self.surface_area or self._state.adding):
             print(f"Calculating volume for part {self.name}")
-            self.volume = self.calculate_volume()
+            vol = self.calculate_volume()
+            if vol is not None:
+                self.volume = vol
         super().save(*args, **kwargs)
 
 class PurchasedPart(models.Model):

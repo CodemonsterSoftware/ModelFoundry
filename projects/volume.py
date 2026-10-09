@@ -20,16 +20,15 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 logger = logging.getLogger(__name__)
 
 
-# ─── Volume Computation (pickle-safe, no Django) ───────────────────────────
-
-def compute_volume(file_path):
+def compute_mesh_stats(file_path):
     """
-    Compute the volume of a 3D mesh file in cubic millimeters.
+    Compute the volume (mm³) and surface area (mm²) of a 3D mesh file.
 
     Uses numpy-stl for STL files (faster binary parse, vectorized math)
     and falls back to trimesh for other formats.
 
-    This is a pure function (file path → number) safe for ProcessPoolExecutor.
+    Returns (volume, surface_area) tuple of floats, or None on error.
+    This is a pure function (file path → tuple) safe for ProcessPoolExecutor.
     """
     if not file_path or not os.path.exists(file_path):
         return None
@@ -41,15 +40,29 @@ def compute_volume(file_path):
             from stl import mesh as stl_mesh
             m = stl_mesh.Mesh.from_file(file_path)
             volume, _, _ = m.get_mass_properties()
-            return abs(float(volume))
+            area = float(m.areas.sum())
+            return (abs(float(volume)), abs(area))
         else:
             import trimesh
             mesh_data = trimesh.load(file_path, force='mesh')
-            return abs(float(mesh_data.volume))
+            return (abs(float(mesh_data.volume)), abs(float(mesh_data.area)))
 
     except Exception as e:
-        logger.error(f"Error computing volume for {file_path}: {e}")
+        logger.error(f"Error computing mesh stats for {file_path}: {e}")
         return None
+
+
+def compute_volume(file_path):
+    """
+    Compute the volume of a 3D mesh file in cubic millimeters.
+
+    Uses numpy-stl for STL files (faster binary parse, vectorized math)
+    and falls back to trimesh for other formats.
+
+    Legacy wrapper around compute_mesh_stats.
+    """
+    stats = compute_mesh_stats(file_path)
+    return stats[0] if stats else None
 
 
 # ─── Background Pipeline ──────────────────────────────────────────────────
@@ -310,7 +323,7 @@ def _run_volume_phase(task_id, part_ids_and_paths, total, max_workers):
 
     with ProcessPoolExecutor(max_workers=max_workers) as pool:
         future_to_part = {
-            pool.submit(compute_volume, path): part_id
+            pool.submit(compute_mesh_stats, path): part_id
             for part_id, path in part_ids_and_paths
         }
 
@@ -318,9 +331,10 @@ def _run_volume_phase(task_id, part_ids_and_paths, total, max_workers):
             part_id = future_to_part[future]
             try:
                 close_old_connections()
-                volume = future.result(timeout=120)
-                if volume is not None:
-                    Part.objects.filter(id=part_id).update(volume=volume)
+                stats = future.result(timeout=120)
+                if stats is not None:
+                    volume, surface_area = stats
+                    Part.objects.filter(id=part_id).update(volume=volume, surface_area=surface_area)
             except Exception as e:
                 logger.error(f"[pipeline] Volume failed for part {part_id}: {e}")
 
