@@ -13,6 +13,12 @@ services:
     build:
       context: ./blender_service
 
+  slicer:
+    build:
+      context: ./slicer_service
+    ports:
+      - "8090:8090"
+
   mqtt_listener:
     volumes:
       - .:/app

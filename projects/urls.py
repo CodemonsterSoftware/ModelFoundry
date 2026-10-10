@@ -73,5 +73,6 @@ urlpatterns = [
     path('api/logs/machine/<int:machine_id>/', login_required(views.api_machine_logs), name='api_machine_logs'),
     path('project/<int:project_id>/generate-thumbnails/', login_required(views.project_generate_thumbnails), name='project_generate_thumbnails'),
     path('project/<int:project_id>/calculate-volumes/', login_required(views.project_calculate_volumes), name='project_calculate_volumes'),
+    path('project/<int:project_id>/part/<int:part_id>/slice-estimate/', login_required(views.slice_estimate_part), name='slice_estimate_part'),
     path('insights/', login_required(views.insights), name='insights'),
 ] 

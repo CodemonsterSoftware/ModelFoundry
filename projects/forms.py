@@ -223,6 +223,57 @@ class MachineForm(forms.ModelForm):
             'mqtt_access_code': 'MQTT Access Code',
         }
 
+    # Slice profile (Kiri:Moto sidecar). Stored sparse on Machine.slice_profile —
+    # only values differing from Machine.SLICE_PROFILE_DEFAULTS are persisted.
+    layer_height = forms.FloatField(min_value=0.05, max_value=1.0)
+    shells = forms.IntegerField(min_value=1, max_value=20)
+    infill_pct = forms.IntegerField(min_value=0, max_value=100)
+    support_enabled = forms.BooleanField(required=False)
+    support_angle = forms.IntegerField(min_value=20, max_value=90,
+                                       help_text='Overhang threshold; steeper faces get supports. Also drives auto-orientation.')
+    support_density = forms.IntegerField(min_value=1, max_value=100)
+    brim = forms.BooleanField(required=False)
+    nozzle_diameter = forms.FloatField(min_value=0.1, max_value=3.0)
+    filament_diameter = forms.FloatField(min_value=0.5, max_value=4.0)
+
+    SLICE_FIELDS = ('layer_height', 'shells', 'infill_pct', 'support_enabled',
+                    'support_angle', 'support_density', 'brim',
+                    'nozzle_diameter', 'filament_diameter')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        profile = self.instance.get_slice_profile()
+        for f in self.SLICE_FIELDS:
+            self.fields[f].initial = profile[f]
+        self.fields['layer_height'].widget = forms.NumberInput(attrs={'class': 'form-control', 'step': 0.05, 'min': 0.05, 'max': 1})
+        self.fields['shells'].widget = forms.NumberInput(attrs={'class': 'form-control'})
+        self.fields['infill_pct'].widget = forms.NumberInput(attrs={'class': 'form-control'})
+        self.fields['support_angle'].widget = forms.NumberInput(attrs={'class': 'form-control'})
+        self.fields['support_density'].widget = forms.NumberInput(attrs={'class': 'form-control'})
+        self.fields['nozzle_diameter'].widget = forms.NumberInput(attrs={'class': 'form-control', 'step': 0.05})
+        self.fields['filament_diameter'].widget = forms.NumberInput(attrs={'class': 'form-control', 'step': 0.01})
+        self.fields['layer_height'].label = 'Layer Height (mm)'
+        self.fields['shells'].label = 'Shells / Perimeters'
+        self.fields['infill_pct'].label = 'Infill (%)'
+        self.fields['support_enabled'].label = 'Supports'
+        self.fields['support_density'].label = 'Support Density (%)'
+        self.fields['brim'].label = 'Brim'
+        self.fields['nozzle_diameter'].label = 'Nozzle Diameter (mm)'
+        self.fields['filament_diameter'].label = 'Filament Diameter (mm)'
+
+    def save(self, commit=True):
+        machine = super().save(commit=False)
+        defaults = Machine.SLICE_PROFILE_DEFAULTS
+        profile = {}
+        for f in self.SLICE_FIELDS:
+            value = self.cleaned_data[f]
+            if value != defaults[f]:
+                profile[f] = value
+        machine.slice_profile = profile
+        if commit:
+            machine.save()
+        return machine
+
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import User
 

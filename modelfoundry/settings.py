@@ -125,6 +125,8 @@ if IS_DOCKER:
     
     # Blender Service URL in Docker network
     BLENDER_SERVICE_URL = os.environ.get('BLENDER_SERVICE_URL', 'http://blender:8081')
+    # Optional slicer sidecar; empty = filament estimates use the geometry heuristic
+    SLICER_SERVICE_URL = os.environ.get('SLICER_SERVICE_URL', '')
 
 else:
     # Local development - use SQLite3
@@ -137,6 +139,8 @@ else:
     
     # Local development - Blender service exposed on localhost
     BLENDER_SERVICE_URL = os.environ.get('BLENDER_SERVICE_URL', 'http://localhost:8081')
+    # Optional slicer sidecar; empty = filament estimates use the geometry heuristic
+    SLICER_SERVICE_URL = os.environ.get('SLICER_SERVICE_URL', '')
 
 
 # Password validation

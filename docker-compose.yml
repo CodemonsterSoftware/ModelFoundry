@@ -16,6 +16,8 @@ services:
       - SECRET_KEY=your-secret-key-here
       - DATABASE_URL=postgres://postgres:postgres@db:5432/modelfoundry
       - DOCKER_CONTAINER=true
+      # Optional slicer sidecar (docker compose --profile slicer up); falls back to heuristic when down
+      - SLICER_SERVICE_URL=http://slicer:8090
       # - "DEMO_BANNER_TEXT=Demo Credentials - User: admin / Pass: test"
     depends_on:
       db:
@@ -56,6 +58,14 @@ services:
     networks:
       - app_network
       
+  slicer:
+    image: codemonstersoftware/modelfoundry-slicer:latest
+    profiles: ["slicer"]
+    restart: unless-stopped
+    # no host port: web reaches it over app_network (dev override publishes 8090)
+    networks:
+      - app_network
+
   mqtt_listener:
     image: codemonstersoftware/modelfoundry:latest
     command: python manage.py run_mqtt_listener

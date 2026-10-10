@@ -347,6 +347,68 @@
                                     </div>
                                 </div>
                                 <div class="row">
+                                    <div class="col-12 mt-2 mb-1">
+                                        <h6 class="text-secondary fw-bold mb-0"><i class="fas fa-sliders me-1"></i> Slice Profile</h6>
+                                        <small class="text-muted">Used by the slicer sidecar for accurate filament estimates (when enabled).</small>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="id_layer_height" class="form-label  fw-bold">{{ machine_form.layer_height.label }}</label>
+                                        {% render_field machine_form.layer_height %}
+                                        {% if machine_form.layer_height.errors %}<div class="invalid-feedback d-block">{{ machine_form.layer_height.errors }}</div>{% endif %}
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="id_shells" class="form-label  fw-bold">{{ machine_form.shells.label }}</label>
+                                        {% render_field machine_form.shells %}
+                                        {% if machine_form.shells.errors %}<div class="invalid-feedback d-block">{{ machine_form.shells.errors }}</div>{% endif %}
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="id_infill_pct" class="form-label  fw-bold">{{ machine_form.infill_pct.label }}</label>
+                                        {% render_field machine_form.infill_pct %}
+                                        {% if machine_form.infill_pct.errors %}<div class="invalid-feedback d-block">{{ machine_form.infill_pct.errors }}</div>{% endif %}
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="id_nozzle_diameter" class="form-label  fw-bold">{{ machine_form.nozzle_diameter.label }}</label>
+                                        {% render_field machine_form.nozzle_diameter %}
+                                        {% if machine_form.nozzle_diameter.errors %}<div class="invalid-feedback d-block">{{ machine_form.nozzle_diameter.errors }}</div>{% endif %}
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="id_filament_diameter" class="form-label  fw-bold">{{ machine_form.filament_diameter.label }}</label>
+                                        {% render_field machine_form.filament_diameter %}
+                                        {% if machine_form.filament_diameter.errors %}<div class="invalid-feedback d-block">{{ machine_form.filament_diameter.errors }}</div>{% endif %}
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="id_support_angle" class="form-label  fw-bold">{{ machine_form.support_angle.label }}</label>
+                                        {% render_field machine_form.support_angle %}
+                                        {% if machine_form.support_angle.errors %}<div class="invalid-feedback d-block">{{ machine_form.support_angle.errors }}</div>{% endif %}
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4 mb-3">
+                                        <label for="id_support_density" class="form-label  fw-bold">{{ machine_form.support_density.label }}</label>
+                                        {% render_field machine_form.support_density %}
+                                        {% if machine_form.support_density.errors %}<div class="invalid-feedback d-block">{{ machine_form.support_density.errors }}</div>{% endif %}
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <div class="form-check mt-2">
+                                            {% render_field machine_form.support_enabled class="form-check-input" %}
+                                            <label for="id_support_enabled" class="form-check-label fw-bold">{{ machine_form.support_enabled.label }}</label>
+                                        </div>
+                                        {% if machine_form.support_enabled.errors %}<div class="invalid-feedback d-block">{{ machine_form.support_enabled.errors }}</div>{% endif %}
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <div class="form-check mt-2">
+                                            {% render_field machine_form.brim class="form-check-input" %}
+                                            <label for="id_brim" class="form-check-label fw-bold">{{ machine_form.brim.label }}</label>
+                                        </div>
+                                        {% if machine_form.brim.errors %}<div class="invalid-feedback d-block">{{ machine_form.brim.errors }}</div>{% endif %}
+                                    </div>
+                                </div>
+
+                                <div class="row">
                                     <div class="col-md-6 mb-3">
                                         <label for="id_ip_address" class="form-label  fw-bold">{{ machine_form.ip_address.label }}</label>
                                         {% render_field machine_form.ip_address class="form-control " placeholder="e.g. 192.168.1.100" %}

@@ -1196,6 +1196,27 @@
                                         <div class="text-muted" id="costBasisNote" style="font-size: 0.65rem; line-height: 1.1;"></div>
                                     </div>
                                 </div>
+
+                                <!-- Print estimate (slicer sidecar or heuristic) -->
+                                <div class="mt-3">
+                                    <label class="form-label fw-bold" for="estimateMachine">Print Estimate</label>
+                                    {% if machines %}
+                                    <div class="d-flex gap-2">
+                                        <select class="form-select form-select-sm" id="estimateMachine">
+                                            <option value="">Select machine…</option>
+                                            {% for machine in machines %}
+                                            <option value="{{ machine.id }}">{{ machine.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <button type="button" class="btn btn-sm btn-outline-primary flex-shrink-0" id="runSliceEstimate">
+                                            <i class="fas fa-calculator"></i> Estimate
+                                        </button>
+                                    </div>
+                                    {% else %}
+                                    <div class="small text-muted">Add a machine in <a href="{% url 'projects:settings' %}">Settings</a> to estimate print weight and time.</div>
+                                    {% endif %}
+                                    <div id="estimateResult" class="mt-2 small" style="display: none;"></div>
+                                </div>
                             </div>
 
                             <hr class="border-secondary opacity-25 my-3">
@@ -1993,6 +2014,117 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Print estimate: render slicer/heuristic result with per-feature breakdown
+    const ESTIMATE_LABELS = { shell: 'Shells', infill: 'Infill', support: 'Supports', other: 'Other' };
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    function formatEstimateTime(s) {
+        if (!s) return null;
+        const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+        return h ? `${h}h ${m}m` : `${m}m`;
+    }
+    // Cost line + basis note; mirrors Part.material_cost priority
+    function renderCostBasis(data) {
+        $('#calculatedCost').text(data.material_cost ? `$${data.material_cost.toFixed(2)}` : '-');
+        if (data.filament_weight_g) {
+            $('#costBasisNote').text(`${data.filament_weight_g}g (sliced file)`);
+        } else if (data.slicer_weight_g) {
+            $('#costBasisNote').text(`${data.slicer_weight_g}g (slicer estimate)`);
+        } else if (data.surface_area) {
+            $('#costBasisNote').text('15% infill estimate');
+        } else {
+            $('#costBasisNote').text('');
+        }
+    }
+    function renderEstimate(est) {
+        const $box = $('#estimateResult');
+        if (!est || !est.source) { $box.hide().empty(); return; }
+        if (est.machine_id && $(`#estimateMachine option[value="${est.machine_id}"]`).length) {
+            $('#estimateMachine').val(String(est.machine_id));
+        }
+        const badge = est.source === 'slicer'
+            ? '<span class="badge bg-primary rounded-pill">Slicer</span>'
+            : '<span class="badge bg-secondary rounded-pill">Estimate</span>';
+        let html = `<div class="d-flex align-items-center gap-2">${badge}<span class="text-muted">${esc(est.machine_name || '')}</span></div>`;
+        const bits = [];
+        if (est.grams) bits.push(`${est.grams}g`);
+        if (est.time_s) bits.push(formatEstimateTime(est.time_s));
+        if (est.cost) bits.push(`$${Number(est.cost).toFixed(2)}`);
+        if (bits.length) html += `<div>${bits.join(' · ')}</div>`;
+        const bd = est.breakdown_g;
+        if (bd && Object.keys(bd).length) {
+            html += '<div class="mt-1">';
+            for (const [k, v] of Object.entries(bd)) {
+                html += `<div class="d-flex justify-content-between"><span class="text-muted">${ESTIMATE_LABELS[k] || esc(k)}</span><span>${v}g</span></div>`;
+            }
+            html += '</div>';
+        }
+        if (est.warning) {
+            html += `<div class="text-warning mt-1"><i class="fas fa-exclamation-triangle me-1"></i>${esc(est.warning)}</div>`;
+        }
+        $box.html(html).show();
+    }
+    function showEstimateError(msg) {
+        $('#estimateResult').html(`<div class="text-danger">${esc(msg)}</div>`).show();
+    }
+    function refreshPartEstimate(partId) {
+        $.get(`/part/${partId}/details/`).done(function (data) {
+            if ($('#partDetailsModal').data('part-id') !== partId) return;
+            renderCostBasis(data);
+            renderEstimate(data.slice_estimate);
+        }).fail(function () { showEstimateError('Could not load the estimate result'); });
+    }
+
+    // Slicing runs server-side in the background: POST -> task_id -> poll
+    // the shared progress endpoint -> re-read part details for the result.
+    const ESTIMATE_POLL_MS = 1000;
+    const ESTIMATE_MAX_MS = 15 * 60 * 1000;
+    let estimatePoll = null;
+    $('#runSliceEstimate').click(function () {
+        const partId = $('#partDetailsModal').data('part-id');
+        const machineId = $('#estimateMachine').val();
+        if (!partId || !machineId || estimatePoll) return;
+        const $btn = $(this).prop('disabled', true);
+        const isCurrent = () => $('#partDetailsModal').data('part-id') === partId;
+        const stop = () => { clearInterval(estimatePoll); estimatePoll = null; $btn.prop('disabled', false); };
+        $('#estimateResult').html('<div class="text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Slicing…</div>').show();
+        $.ajax({
+            url: `/project/{{ project.id }}/part/${partId}/slice-estimate/`,
+            method: 'POST',
+            contentType: 'application/json',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+            data: JSON.stringify({ machine_id: Number(machineId) }),
+        }).done(function (data) {
+            if (data.estimate) { // no slicer configured: heuristic returned inline
+                $btn.prop('disabled', false);
+                if (isCurrent()) renderEstimate(data.estimate);
+                return;
+            }
+            const started = Date.now();
+            estimatePoll = setInterval(function () {
+                $.get(`/api/upload-progress/${data.task_id}/`).done(function (task) {
+                    if (!task.done) {
+                        if (Date.now() - started > ESTIMATE_MAX_MS) {
+                            stop();
+                            if (isCurrent()) showEstimateError('Estimate is taking too long; try again later.');
+                        }
+                        return;
+                    }
+                    stop();
+                    if (!isCurrent()) return;
+                    if (task.status === 'not_found') showEstimateError('Estimate was interrupted (server restarted?). Please try again.');
+                    else if (task.error) showEstimateError(task.error);
+                    else refreshPartEstimate(partId);
+                }); // transient poll failures: keep polling until ESTIMATE_MAX_MS
+            }, ESTIMATE_POLL_MS);
+        }).fail(function (xhr) {
+            $btn.prop('disabled', false);
+            let msg = 'Estimate failed';
+            if (xhr.responseJSON && xhr.responseJSON.message) msg = xhr.responseJSON.message;
+            else if (xhr.status) msg += ` (HTTP ${xhr.status})`;
+            showEstimateError(msg);
+        });
+    });
+
     $('.view-part, .view-btn').not('.view-purchased-part').click(function (e) {
         if ($(e.target).closest('.toggle-parent').length && !$(this).hasClass('view-btn')) {
             return; // Click handled by toggle-parent
@@ -2030,14 +2162,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Update calculated values
             $('#calculatedVolume').text(data.volume ? `${data.volume.toFixed(2)} ${data.unit_system === 'metric' ? 'cm³' : 'in³'}` : '-');
-            $('#calculatedCost').text(data.material_cost ? `$${data.material_cost.toFixed(2)}` : '-');
-            if (data.filament_weight_g) {
-                $('#costBasisNote').text(`${data.filament_weight_g}g (slicer)`);
-            } else if (data.surface_area) {
-                $('#costBasisNote').text('15% infill estimate');
-            } else {
-                $('#costBasisNote').text('');
-            }
+            renderCostBasis(data);
+            renderEstimate(data.slice_estimate);
 
             // Store the part ID for saving changes
             $('#partDetailsModal').data('part-id', partId);
@@ -2072,14 +2198,7 @@ document.addEventListener('DOMContentLoaded', function() {
             $.get(`/part/${partId}/details/`, function (data) {
                 // Update calculated values again in case they weren't set earlier
                 $('#calculatedVolume').text(data.volume ? `${data.volume.toFixed(2)} ${data.unit_system === 'metric' ? 'cm³' : 'in³'}` : '-');
-                $('#calculatedCost').text(data.material_cost ? `$${data.material_cost.toFixed(2)}` : '-');
-                if (data.filament_weight_g) {
-                    $('#costBasisNote').text(`${data.filament_weight_g}g (slicer)`);
-                } else if (data.surface_area) {
-                    $('#costBasisNote').text('15% infill estimate');
-                } else {
-                    $('#costBasisNote').text('');
-                }
+                renderCostBasis(data);
 
                 if (data.stl_url) {
                     $('#partDetailsModal').data('stl-url', data.stl_url);

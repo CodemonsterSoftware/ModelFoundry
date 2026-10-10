@@ -120,6 +120,7 @@ class ProjectDetailView(DetailView):
         
         # Include PurchasedPart model for status choices
         context['PurchasedPart'] = PurchasedPart
+        context['machines'] = Machine.objects.filter(user=self.request.user).order_by('name')
         return context
 
 class ProjectCreateView(CreateView):
@@ -444,6 +445,8 @@ def part_details(request, part_id):
         'material_cost': float(part.material_cost) if part.material_cost else None,
         'surface_area': part.surface_area,
         'filament_weight_g': float(part.filament_weight_g) if part.filament_weight_g else None,
+        'slicer_weight_g': part.slicer_weight_g,
+        'slice_estimate': _slice_estimate_display(part),
     }
     
     # Only include stl_url if the file exists
@@ -3376,3 +3379,146 @@ def project_calculate_volumes(request, project_id):
         'task_id': task_id,
         'total_parts': len(pipeline_tasks)
     })
+
+def _heuristic_estimate(machine, warning=None):
+    """Stored marker for a geometry-heuristic estimate (grams are derived live)."""
+    estimate = {
+        'source': 'estimate',
+        'machine_id': machine.id,
+        'machine_name': machine.name,
+        'filament_mm': None,
+        'time_s': None,
+        'profile': machine.get_slice_profile(),
+    }
+    if warning:
+        estimate['warning'] = warning
+    return estimate
+
+
+def _save_slice_estimate(part, estimate):
+    """Persist an advisory estimate. Never touches filament_weight_g /
+    print_time_seconds: those hold exact data from real slices."""
+    from django.utils import timezone
+    estimate['at'] = timezone.now().isoformat()
+    part.slice_estimate = estimate
+    part._skip_volume = True
+    part._skip_thumbnail = True
+    part.save(update_fields=['slice_estimate'])
+
+
+def _slice_estimate_display(part):
+    """Render-ready view of part.slice_estimate at the CURRENT material, or None.
+
+    Slicer runs: grams from filament_mm x density (Part.slicer_weight_g); a run
+    for a since-replaced file is flagged stale. Heuristic: shell + infill grams.
+    """
+    est = part.slice_estimate or {}
+    if not est.get('source'):
+        return None
+    material = part.material
+    warning = est.get('warning')
+    breakdown_g = None
+    if est['source'] == 'slicer':
+        grams = part.slicer_weight_g
+        breakdown_g = part.slicer_breakdown_g
+        if est.get('stl_name') != part.stl_file.name:
+            warning = 'The part file changed since this estimate; run it again.'
+    else:
+        grams = None
+        if material and material.density and part.effective_volume:
+            grams = round(part.effective_volume / 1000 * float(material.density), 2)
+    cost = None
+    if grams and material and material.cost_per_kg:
+        cost = round(grams / 1000 * float(material.cost_per_kg), 4)
+    return {
+        'source': est['source'],
+        'machine_id': est.get('machine_id'),
+        'machine_name': est.get('machine_name', ''),
+        'grams': grams,
+        'time_s': est.get('time_s'),
+        'filament_mm': est.get('filament_mm'),
+        'cost': cost,
+        'breakdown_g': breakdown_g,
+        'warning': warning,
+        'at': est.get('at'),
+    }
+
+
+@login_required
+@require_POST
+def slice_estimate_part(request, project_id, part_id):
+    """Estimate filament weight/time for one part on a machine.
+
+    SLICER_SERVICE_URL unset -> geometry heuristic, returned inline as
+    {status, estimate}. Set -> slicing runs in a background thread and the
+    response is {status, task_id}; poll /api/upload-progress/<task_id>/, then
+    read the result from part_details. Results are stored in Part.slice_estimate
+    only (advisory; material_cost uses them below exact slice weights).
+    """
+    project = get_object_or_404(Project, id=project_id)
+    part = get_object_or_404(Part, id=part_id, project=project)
+    if not part.stl_file:
+        return JsonResponse({'status': 'error', 'message': 'Part has no 3D file.'}, status=400)
+
+    try:
+        data = json.loads(request.body or '{}')
+    except ValueError:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON body.'}, status=400)
+    machine_id = data.get('machine_id')
+    if not machine_id:
+        return JsonResponse({'status': 'error', 'message': 'machine_id is required.'}, status=400)
+    machine = get_object_or_404(Machine, id=machine_id, user=request.user)
+
+    from django.conf import settings as django_settings
+    base_url = getattr(django_settings, 'SLICER_SERVICE_URL', '') or ''
+    if not base_url:
+        _save_slice_estimate(part, _heuristic_estimate(machine))
+        return JsonResponse({'status': 'success', 'estimate': _slice_estimate_display(part)})
+
+    from projects import progress
+    from projects.volume import generate_task_id
+    task_id = generate_task_id()
+    progress.create_task(task_id, 1)
+    progress.update_task(task_id, phase='slice', status=f'Slicing on {machine.name}...', percent=5)
+    _start_slice_worker(task_id, part.id, machine.id, base_url)
+    return JsonResponse({'status': 'success', 'task_id': task_id})
+
+
+def _start_slice_worker(task_id, part_id, machine_id, base_url):
+    """Spawn the slice worker thread (separate so tests can run it inline)."""
+    def run():
+        from django.db import connection
+        try:
+            _run_slice_task(task_id, part_id, machine_id, base_url)
+        finally:
+            connection.close()  # thread-local connection would otherwise leak
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _run_slice_task(task_id, part_id, machine_id, base_url):
+    """Background worker: slice via the sidecar and store the estimate.
+
+    Part doesn't fit -> task error, nothing saved (a user error, not an outage).
+    Any other slicer failure -> heuristic estimate saved with a warning.
+    """
+    from projects import progress
+    from projects.slicer_estimate import SlicerFitError, estimate_part
+
+    try:
+        part = Part.objects.select_related('material').get(id=part_id)
+        machine = Machine.objects.get(id=machine_id)
+        try:
+            estimate = estimate_part(part, machine, base_url)
+        except SlicerFitError:
+            raise
+        except Exception as e:
+            logger.warning(f"Slice estimate failed for part {part.name} on {machine.name}: {e}; using heuristic")
+            estimate = _heuristic_estimate(
+                machine, warning=f'Slicer unavailable: {e}. Showing the geometry estimate instead.')
+        _save_slice_estimate(part, estimate)
+        progress.finish(task_id, True)
+    except SlicerFitError as e:
+        progress.finish(task_id, False, error=str(e))
+    except Exception as e:
+        logger.exception(f"Slice estimate task {task_id} failed: {e}")
+        progress.finish(task_id, False, error=str(e))

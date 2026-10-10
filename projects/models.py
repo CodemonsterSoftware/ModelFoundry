@@ -2,6 +2,7 @@ from django.db import models
 from django.utils import timezone
 from django.db.models import Sum
 from django.contrib.auth.models import User
+import math
 import os
 import numpy as np
 
@@ -9,6 +10,13 @@ from decimal import Decimal, InvalidOperation
 from django.conf import settings
 from imagekit.models import ImageSpecField
 from imagekit.processors import ResizeToFill, ResizeToFit
+
+
+def filament_mm_to_grams(filament_mm, filament_diameter, density):
+    """Filament length (mm) -> grams: length x cross-section = mm^3, /1000 = cm^3, x density g/cm^3."""
+    cross_section_mm2 = math.pi / 4 * float(filament_diameter) ** 2
+    return round(float(filament_mm) * cross_section_mm2 / 1000 * float(density), 2)
+
 
 class Designer(models.Model):
     name = models.CharField(max_length=100)
@@ -196,11 +204,13 @@ class Material(models.Model):
         total_mass = Decimal('0')
         
         # Get all completed parts that use this material (exclude parent parts that have sub-parts)
-        completed_parts = Part.objects.filter(material=self, completed__gt=0, sub_parts__isnull=True)
+        completed_parts = Part.objects.filter(material=self, completed__gt=0, sub_parts__isnull=True).select_related('material')
         
         for part in completed_parts:
             if part.filament_weight_g is not None and part.filament_weight_g > 0:
                 total_mass += Decimal(str(part.filament_weight_g)) * part.completed
+            elif part.slicer_weight_g:
+                total_mass += Decimal(str(part.slicer_weight_g)) * part.completed
             elif part.volume:
                 vol_mm3 = Decimal(str(part.volume))
                 if part.surface_area:
@@ -249,6 +259,11 @@ class Part(models.Model):
     print_time_seconds = models.IntegerField(null=True, blank=True, help_text="Total print time for one copy in seconds")
     filament_weight_g = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, help_text="Filament weight for one copy in grams")
     assigned_slice_filename = models.CharField(max_length=255, blank=True, help_text="Filename of the assigned slice for exact MQTT tracking")
+    # Last advisory estimate from the slice-estimate endpoint: {source: 'slicer'|'estimate',
+    # machine_id, machine_name, filament_mm, filament_diameter, time_s, breakdown_mm,
+    # stl_name, warning, at}. Never overwrites filament_weight_g / print_time_seconds
+    # (those hold exact data from real slices); grams derive from it via slicer_weight_g.
+    slice_estimate = models.JSONField(default=dict, blank=True)
     
     PRINT_STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -282,6 +297,32 @@ class Part(models.Model):
             return float(shell_vol + (core_vol * self.DEFAULT_INFILL_RATIO))
         return self.volume
 
+    def _current_slicer_estimate(self):
+        """slice_estimate when it is a slicer run for the CURRENT file, else None."""
+        est = self.slice_estimate or {}
+        if est.get('source') != 'slicer' or not est.get('filament_mm'):
+            return None
+        if est.get('stl_name') != self.stl_file.name:
+            return None  # file replaced since the slice: stale
+        return est
+
+    @property
+    def slicer_weight_g(self):
+        """Grams from the last Kiri slice at the material's CURRENT density, or None."""
+        est = self._current_slicer_estimate()
+        if not est or not self.material or not self.material.density:
+            return None
+        return filament_mm_to_grams(est['filament_mm'], est.get('filament_diameter', 1.75), self.material.density)
+
+    @property
+    def slicer_breakdown_g(self):
+        """Per-feature grams {shell, infill, support, other} from the last Kiri slice, or None."""
+        est = self._current_slicer_estimate()
+        if not est or not est.get('breakdown_mm') or not self.material or not self.material.density:
+            return None
+        d = est.get('filament_diameter', 1.75)
+        return {k: filament_mm_to_grams(v, d, self.material.density) for k, v in est['breakdown_mm'].items()}
+
     @property
     def material_cost(self):
         """
@@ -289,11 +330,12 @@ class Part(models.Model):
         
         Priority:
         1. Exact sliced weight (filament_weight_g) if available.
-        2. Shell + Infill geometry approximation if surface_area is available:
+        2. Kiri slicer estimate for the current file (slicer_weight_g).
+        3. Shell + Infill geometry approximation if surface_area is available:
            - Shell volume: surface_area × 1.2mm (capped at total volume)
            - Core volume: (total volume - shell volume) × 15% infill
            - Mass: printed volume (cm³) × density (g/cm³)
-        3. Fallback: Solid volume × density.
+        4. Fallback: Solid volume × density.
         """
         if not self.material:
             return None
@@ -301,6 +343,8 @@ class Part(models.Model):
         try:
             if self.filament_weight_g is not None and self.filament_weight_g > 0:
                 mass_g = Decimal(str(self.filament_weight_g))
+            elif self.slicer_weight_g:
+                mass_g = Decimal(str(self.slicer_weight_g))
             elif self.volume:
                 vol_mm3 = Decimal(str(self.volume))
                 if self.surface_area:
@@ -482,6 +526,27 @@ class Machine(models.Model):
     print_volume_y = models.PositiveIntegerField(help_text="Print volume Y in mm")
     print_volume_z = models.PositiveIntegerField(help_text="Print volume Z in mm")
     
+    # Slicing profile for filament estimation (Kiri:Moto sidecar). Stored sparse;
+    # read via get_slice_profile() which merges over these defaults.
+    SLICE_PROFILE_DEFAULTS = {
+        'layer_height': 0.2,       # mm
+        'shells': 2,               # perimeters
+        'infill_pct': 15,          # % sparse infill
+        'support_enabled': True,
+        'support_angle': 45,       # deg; also drives auto-orientation overhang threshold
+        'support_density': 100,    # %
+        'brim': False,
+        'filament_type': '',
+        'nozzle_diameter': 0.4,    # mm (Machine has no nozzle field; profile carries it)
+        'filament_diameter': 1.75, # mm
+    }
+    slice_profile = models.JSONField(default=dict, blank=True)
+
+    def get_slice_profile(self):
+        profile = dict(self.SLICE_PROFILE_DEFAULTS)
+        profile.update(self.slice_profile or {})
+        return profile
+
     # MQTT Sync Fields
     ip_address = models.CharField(max_length=45, blank=True, null=True, help_text="IP address of the printer on the local network")
     mqtt_access_code = models.CharField(max_length=100, blank=True, null=True, help_text="Access code for MQTT authentication")

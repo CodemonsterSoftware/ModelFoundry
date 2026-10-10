@@ -11,7 +11,8 @@ chunks arrive (append_items) and the background consumer starts only once
 (start_consumer_once), waiting for set_uploads_done before draining the queue.
 
 Single-user design — no Redis/cache needed.
-Auto-cleans stale tasks after 5 minutes of inactivity.
+Auto-cleans stale tasks after 5 minutes of inactivity; a client polling a task
+counts as activity, so long-running work (e.g. slicing) isn't reaped mid-flight.
 """
 import queue
 import threading
@@ -190,6 +191,7 @@ def get_task(task_id):
         task = _tasks.get(task_id)
         if not task:
             return None
+        task['last_activity'] = time.time()
 
         # Calculate overall percentage from phase + completed/total
         total = max(task['total'], 1)

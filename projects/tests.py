@@ -2,17 +2,19 @@ from django.test import TestCase, SimpleTestCase, Client, override_settings
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from .models import Project, Part, Group, Collection, PurchasedPart, Material, Designer, Instructions, ProjectImage
+from .models import Project, Part, Group, Collection, PurchasedPart, Material, Designer, Instructions, ProjectImage, Machine
 import io
 import json
+import math
 import os
 import tempfile
 import zipfile
 from decimal import Decimal
+import numpy as np
 from django.core.files import File
 from django.core.files.base import ContentFile
 from django.template.loader import render_to_string
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 class ViewTests(TestCase):
     def setUp(self):
@@ -2051,3 +2053,381 @@ class ImportProgressTests(TestCase):
         progress.cleanup_task(tid2)
         progress.cleanup_task(tid3)
 
+
+class OrientationTests(SimpleTestCase):
+    def _box(self, lx, ly, lz):
+        x, y, z = lx / 2, ly / 2, lz / 2
+        v = np.array([[-x, -y, -z], [x, -y, -z], [x, y, -z], [-x, y, -z],
+                      [-x, -y, z], [x, -y, z], [x, y, z], [-x, y, z]], dtype=float)
+        faces = [(0, 2, 1), (0, 3, 2), (4, 5, 6), (4, 6, 7), (0, 1, 5), (0, 5, 4),
+                 (3, 6, 2), (3, 7, 6), (0, 4, 7), (0, 7, 3), (1, 2, 6), (1, 6, 5)]
+        return v[np.array(faces)]
+
+    def _cone(self, r, h, n=32):
+        theta = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        ring = np.column_stack([r * np.cos(theta), r * np.sin(theta), np.full(n, h)])
+        apex = np.array([0.0, 0.0, 0.0])
+        center = np.array([0.0, 0.0, h])
+        tris = []
+        for i in range(n):
+            j = (i + 1) % n
+            tris.append([apex, ring[j], ring[i]])
+            tris.append([center, ring[i], ring[j]])
+        return np.array(tris)
+
+    def test_rotation_is_valid(self):
+        from projects.orient import best_orientation
+        R, info = best_orientation(self._box(20, 20, 20))
+        self.assertTrue(np.allclose(R @ R.T, np.eye(3), atol=1e-9))
+        self.assertAlmostEqual(float(np.linalg.det(R)), 1.0, places=9)
+        self.assertGreater(info['n_candidates'], 10)
+
+    def test_plate_lays_flat(self):
+        from projects.orient import best_orientation
+        # Big faces vertical as modeled (standing on a 40x2 edge)
+        plate = self._box(40, 2, 30)
+        R, info = best_orientation(plate)
+        rotated = (R @ plate.reshape(-1, 3).T).T
+        z_range = rotated[:, 2].max() - rotated[:, 2].min()
+        self.assertLess(z_range, 2.5)
+
+    def test_plate_already_flat_stays(self):
+        from projects.orient import best_orientation
+        plate = self._box(40, 30, 2)
+        R, info = best_orientation(plate)
+        self.assertTrue(np.allclose(R, np.eye(3), atol=1e-9))
+
+    def test_cone_flips_base_down(self):
+        from projects.orient import best_orientation
+        r, h = 10.0, 6.0
+        cone = self._cone(r, h)  # apex down as modeled: sides overhang past 45 deg
+        total_area = sum(
+            0.5 * np.linalg.norm(np.cross(t[1] - t[0], t[2] - t[0])) for t in cone
+        )
+        smooth = math.pi * r * r + math.pi * r * math.sqrt(r * r + h * h)
+        # Faceted cone area is slightly under the smooth-cone value
+        self.assertGreater(total_area, 0.98 * smooth)
+        self.assertLess(total_area, smooth)
+
+        R, info = best_orientation(cone)
+        pts = (R @ cone.reshape(-1, 3).T).T
+        zmin, zmax = pts[:, 2].min(), pts[:, 2].max()
+        # Vertex mean of a cone sits 5/6 h from the apex; base-down puts it in
+        # the lower half of the bounding box. Apex-down (no flip) would fail this.
+        self.assertLess(pts[:, 2].mean() - zmin, (zmax - zmin) / 2)
+
+
+class MachineSliceProfileTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='muser', password='pass123')
+
+    def _machine(self, **kwargs):
+        return Machine.objects.create(
+            user=self.user, name='Test Printer',
+            print_volume_x=220, print_volume_y=220, print_volume_z=250, **kwargs
+        )
+
+    def test_defaults_applied_when_empty(self):
+        m = self._machine()
+        profile = m.get_slice_profile()
+        self.assertEqual(profile, Machine.SLICE_PROFILE_DEFAULTS)
+
+    def test_partial_profile_merges_over_defaults(self):
+        m = self._machine(slice_profile={'layer_height': 0.12, 'infill_pct': 20})
+        profile = m.get_slice_profile()
+        self.assertEqual(profile['layer_height'], 0.12)
+        self.assertEqual(profile['infill_pct'], 20)
+        # Untouched keys keep defaults
+        self.assertEqual(profile['shells'], Machine.SLICE_PROFILE_DEFAULTS['shells'])
+        self.assertEqual(profile['support_enabled'], True)
+
+    def test_none_profile_treated_as_empty(self):
+        m = self._machine()
+        m.slice_profile = None
+        profile = m.get_slice_profile()
+        self.assertEqual(profile, Machine.SLICE_PROFILE_DEFAULTS)
+
+
+class MachineSliceProfileFormTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='slicefmuser', password='pass123')
+        self.client = Client()
+        self.client.login(username='slicefmuser', password='pass123')
+
+    def _machine_post(self, action, machine_id=None, **overrides):
+        # support_enabled 'on' mirrors the browser: the form renders it checked by default
+        data = {
+            'machine_action': action,
+            'name': 'Test Printer', 'maker': 'Creality', 'model': 'Ender 3',
+            'technology': 'FDM',
+            'print_volume_x': '220', 'print_volume_y': '220', 'print_volume_z': '250',
+            'ip_address': '', 'mqtt_access_code': '', 'notes': '',
+            # slice profile defaults
+            'layer_height': '0.2', 'shells': '2', 'infill_pct': '15',
+            'support_enabled': 'on', 'support_angle': '45', 'support_density': '100',
+            'nozzle_diameter': '0.4', 'filament_diameter': '1.75',
+        }
+        if machine_id:
+            data['machine_id'] = str(machine_id)
+        for k, v in overrides.items():
+            if v is True:
+                data[k] = 'on'
+            elif v is False:
+                data.pop(k, None)  # unchecked checkbox posts nothing
+            else:
+                data[k] = v
+        return self.client.post(reverse('projects:settings'), data)
+
+    def test_add_machine_stores_only_non_default_values(self):
+        response = self._machine_post('add', layer_height='0.28', infill_pct='30', brim=True)
+        self.assertEqual(response.status_code, 302)
+        m = Machine.objects.get(user=self.user)
+        self.assertEqual(m.slice_profile, {'layer_height': 0.28, 'infill_pct': 30, 'brim': True})
+        profile = m.get_slice_profile()
+        self.assertEqual(profile['shells'], 2)  # default kept via merge
+
+    def test_add_machine_all_defaults_stores_empty(self):
+        response = self._machine_post('add', support_enabled=True)
+        self.assertEqual(response.status_code, 302)
+        m = Machine.objects.get(user=self.user)
+        self.assertEqual(m.slice_profile, {})
+
+    def test_edit_reverting_to_default_removes_key(self):
+        m = Machine.objects.create(
+            user=self.user, name='Test Printer',
+            print_volume_x=220, print_volume_y=220, print_volume_z=250,
+            slice_profile={'layer_height': 0.28}
+        )
+        response = self._machine_post('edit', machine_id=m.id)  # back to default 0.2
+        self.assertEqual(response.status_code, 302)
+        m.refresh_from_db()
+        self.assertEqual(m.slice_profile, {})
+
+    def test_edit_form_initial_reflects_stored_profile(self):
+        Machine.objects.create(
+            user=self.user, name='Test Printer',
+            print_volume_x=220, print_volume_y=220, print_volume_z=250,
+            slice_profile={'layer_height': 0.32, 'brim': True}
+        )
+        m = Machine.objects.get(user=self.user)
+        response = self.client.get(reverse('projects:settings'), {'edit_machine': m.id})
+        self.assertContains(response, 'value="0.32"')
+        self.assertRegex(response.content, rb'name="brim"[^>]*checked')
+
+    def test_settings_page_renders_slice_fields(self):
+        response = self.client.get(reverse('projects:settings'))
+        self.assertEqual(response.status_code, 200)
+        for field_id in ('id_layer_height', 'id_shells', 'id_infill_pct', 'id_support_enabled',
+                         'id_support_angle', 'id_support_density', 'id_brim',
+                         'id_nozzle_diameter', 'id_filament_diameter'):
+            self.assertContains(response, f'id="{field_id}"')
+
+
+class SliceEstimateTests(TestCase):
+    """slice_estimate_part: background sidecar slicing (run inline here), heuristic
+    fallback, advisory storage, and the Kiri tier of material cost."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='slicerm', password='pass123')
+        self.client = Client()
+        self.client.login(username='slicerm', password='pass123')
+        self.project = Project.objects.create(name='Slice Test', user=self.user)
+        self.material = Material.objects.create(
+            name='PLA Black', type='PLA', density=Decimal('1.24'),
+            cost=Decimal('25.00'), weight=Decimal('1000.00'),
+        )
+        self.machine = Machine.objects.create(
+            user=self.user, name='Ender 3',
+            print_volume_x=220, print_volume_y=220, print_volume_z=250,
+        )
+        self.part = self._make_part('cube', 'slice_cube.stl', (20, 20, 20),
+                                    volume=8000.0, surface_area=2400.0)
+
+    def tearDown(self):
+        for part in Part.objects.filter(project=self.project).exclude(stl_file=''):
+            part.stl_file.delete(save=False)
+
+    def _make_part(self, name, filename, extents, **fields):
+        import trimesh
+        stl_bytes = trimesh.creation.box(extents=extents).export(file_type='stl')
+        part = Part(project=self.project, name=name, material=self.material, **fields)
+        part._skip_volume = True
+        part._skip_thumbnail = True
+        part.stl_file.save(filename, ContentFile(stl_bytes), save=False)
+        part.save()
+        return part
+
+    @staticmethod
+    def _sidecar_ok(filament_mm=1000.0, time_s=3600):
+        resp = Mock(status_code=200)
+        resp.json.return_value = {
+            'ok': True, 'filament_mm': filament_mm, 'time_s': time_s,
+            'breakdown_mm': {'shell': 600.0, 'infill': 300.0, 'support': 100.0},
+        }
+        return resp
+
+    def _post(self, part=None, machine=None):
+        part = part or self.part
+        return self.client.post(
+            reverse('projects:slice_estimate_part', args=[self.project.id, part.id]),
+            data=json.dumps({'machine_id': (machine or self.machine).id}),
+            content_type='application/json',
+        )
+
+    def _estimate(self, part=None, machine=None, **post_kwargs):
+        """POST with the sidecar enabled, running the background worker inline.
+        Returns (response, final task dict)."""
+        from projects import progress, views
+        with override_settings(SLICER_SERVICE_URL='http://slicer:8090'), \
+                patch('projects.views._start_slice_worker', side_effect=views._run_slice_task), \
+                patch('projects.slicer_estimate.requests.post', **post_kwargs) as post:
+            response = self._post(part, machine)
+        self.post_mock = post
+        task_id = response.json().get('task_id')
+        return response, progress.get_task(task_id) if task_id else None
+
+    def _slicer_call(self):
+        """The /slice call among patched requests.post calls (Blender thumbnail
+        signal calls also hit the shared module-level post)."""
+        for c in self.post_mock.call_args_list:
+            if str(c.args[0]).endswith('/slice'):
+                return c
+        return None
+
+    def test_slicer_estimate_never_overwrites_exact_slice_data(self):
+        # Weight/time from a real claimed slice must survive a Kiri estimate
+        self.part.filament_weight_g = Decimal('42.00')
+        self.part.print_time_seconds = 7200
+        self.part.save()
+        response, task = self._estimate(return_value=self._sidecar_ok())
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(task['done'])
+        self.assertIsNone(task['error'])
+        self.part.refresh_from_db()
+        self.assertEqual(self.part.filament_weight_g, Decimal('42.00'))
+        self.assertEqual(self.part.print_time_seconds, 7200)
+        self.assertEqual(self.part.slice_estimate['source'], 'slicer')
+        # exact weight still wins the cost: 42g x $0.025/g
+        self.assertAlmostEqual(self.part.material_cost, 1.05, places=4)
+        # sidecar got the auto-oriented part with the machine profile mapped
+        payload = self._slicer_call().kwargs['json']
+        self.assertEqual(payload['device']['bedWidth'], 220)
+        self.assertEqual(payload['process']['sliceHeight'], 0.2)
+        self.assertEqual(payload['process']['sliceSupportType'], 'automatic')
+        self.assertAlmostEqual(payload['process']['sliceFillSparse'], 0.15, places=6)
+
+    def test_slicer_estimate_drives_cost_without_exact_weight(self):
+        self._estimate(return_value=self._sidecar_ok())
+        self.part.refresh_from_db()
+        # 1000mm x (pi/4 * 1.75^2) mm^2 / 1000 x 1.24 g/cm^3 = 2.98 g -> $0.0745
+        self.assertAlmostEqual(self.part.slicer_weight_g, 2.98, places=2)
+        self.assertAlmostEqual(self.part.material_cost, 2.98 * 0.025, places=4)
+        self.part.completed = 2
+        self.part.save()
+        self.assertAlmostEqual(float(self.material.total_used), 5.96, places=2)
+
+        data = self.client.get(reverse('projects:part_details', args=[self.part.id])).json()
+        est = data['slice_estimate']
+        self.assertEqual(est['source'], 'slicer')
+        self.assertAlmostEqual(est['grams'], 2.98, places=2)
+        self.assertAlmostEqual(est['cost'], 0.0745, places=4)
+        self.assertEqual(est['time_s'], 3600)
+        self.assertEqual(est['machine_id'], self.machine.id)
+        self.assertAlmostEqual(est['breakdown_g']['shell'], 1.79, places=2)
+        self.assertAlmostEqual(est['breakdown_g']['support'], 0.30, places=2)
+        self.assertIsNone(est['warning'])
+
+    def test_slicer_grams_follow_current_material_density(self):
+        self._estimate(return_value=self._sidecar_ok())
+        self.material.density = Decimal('2.48')
+        self.material.save()
+        part = Part.objects.get(id=self.part.id)
+        self.assertAlmostEqual(part.slicer_weight_g, 5.97, places=2)  # 1000mm x 2.405mm^2 x 2.48
+
+    def test_replaced_file_invalidates_slicer_estimate(self):
+        self._estimate(return_value=self._sidecar_ok())
+        part = Part.objects.get(id=self.part.id)
+        part.stl_file.save('slice_cube_v2.stl', ContentFile(b'solid x\nendsolid x\n'), save=False)
+        part._skip_volume = True
+        part._skip_thumbnail = True
+        part.volume, part.surface_area = 8000.0, 2400.0
+        part.save()
+        self.assertIsNone(part.slicer_weight_g)
+        # cost falls through to the shell + infill heuristic
+        expected_g = part.effective_volume / 1000 * 1.24
+        self.assertAlmostEqual(part.material_cost, expected_g * 0.025, places=4)
+        est = self.client.get(reverse('projects:part_details', args=[part.id])).json()['slice_estimate']
+        self.assertIsNone(est['grams'])
+        self.assertIn('changed', est['warning'])
+
+    def test_no_slicer_url_returns_heuristic_inline(self):
+        with override_settings(SLICER_SERVICE_URL=''), \
+                patch('projects.views._start_slice_worker') as worker:
+            response = self._post()
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn('task_id', data)
+        self.assertEqual(data['estimate']['source'], 'estimate')
+        self.assertIsNone(data['estimate']['time_s'])
+        self.assertIsNotNone(data['estimate']['grams'])
+        worker.assert_not_called()
+        self.part.refresh_from_db()
+        self.assertIsNone(self.part.filament_weight_g)
+        self.assertEqual(self.part.slice_estimate['source'], 'estimate')
+
+    def test_sidecar_down_saves_heuristic_with_warning(self):
+        import requests as _requests
+        response, task = self._estimate(side_effect=_requests.ConnectionError('refused'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(task['done'])
+        self.assertIsNone(task['error'])
+        self.part.refresh_from_db()
+        self.assertEqual(self.part.slice_estimate['source'], 'estimate')
+        self.assertIn('Slicer unavailable', self.part.slice_estimate['warning'])
+        self.assertIsNone(self.part.filament_weight_g)
+
+    def test_part_too_big_reports_error_and_saves_nothing(self):
+        tiny = Machine.objects.create(
+            user=self.user, name='Tiny',
+            print_volume_x=10, print_volume_y=10, print_volume_z=10,
+        )
+        response, task = self._estimate(machine=tiny)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(task['done'])
+        self.assertIn('does not fit', task['error'])
+        self.assertIsNone(self._slicer_call())
+        self.part.refresh_from_db()
+        self.assertEqual(self.part.slice_estimate, {})
+
+    def test_long_part_fits_after_quarter_turn(self):
+        # 200mm bar only fits a 50 x 250 x 15 bed lying along Y
+        bar = self._make_part('bar', 'slice_bar.stl', (200, 20, 10))
+        narrow = Machine.objects.create(
+            user=self.user, name='Narrow',
+            print_volume_x=50, print_volume_y=250, print_volume_z=15,
+        )
+        _, task = self._estimate(part=bar, machine=narrow, return_value=self._sidecar_ok())
+        self.assertIsNone(task['error'])
+        self.assertIsNotNone(self._slicer_call())
+        bar.refresh_from_db()
+        self.assertEqual(bar.slice_estimate['source'], 'slicer')
+
+    def test_missing_machine_and_file_errors(self):
+        response = self.client.post(
+            reverse('projects:slice_estimate_part', args=[self.project.id, self.part.id]),
+            data=json.dumps({}), content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+
+        fileless = Part.objects.create(project=self.project, name='nofile')
+        response = self._post(part=fileless)
+        self.assertEqual(response.status_code, 400)
+
+    def test_foreign_machine_rejected(self):
+        other = User.objects.create_user(username='otheru', password='pass123')
+        foreign = Machine.objects.create(
+            user=other, name='Foreign',
+            print_volume_x=220, print_volume_y=220, print_volume_z=250,
+        )
+        response = self._post(machine=foreign)
+        self.assertEqual(response.status_code, 404)
