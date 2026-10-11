@@ -13,7 +13,7 @@
         <div>
             <form action="{% url 'projects:slicer_inbox_clear_all' %}" method="post" onsubmit="return confirm('Are you sure you want to clear all slices? This cannot be undone.');">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-outline-danger fw-medium" style="border-radius: 8px;">
+                <button type="submit" class="btn btn-outline-danger fw-medium">
                     <i class="fas fa-trash-alt me-2"></i>Clear All
                 </button>
             </form>
@@ -113,10 +113,10 @@
                         </div>
                         
                         <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-sm btn-primary flex-grow-1" style="border-radius: 8px;">
+                            <button type="submit" class="btn btn-sm btn-primary flex-grow-1">
                                 <i class="fas fa-check me-1"></i> Assign
                             </button>
-                            <a href="{% url 'projects:dismiss_slice' slice.id %}" class="btn btn-sm btn-outline-danger" style="border-radius: 8px;" title="Dismiss">
+                            <a href="{% url 'projects:dismiss_slice' slice.id %}" class="btn btn-sm btn-outline-danger" title="Dismiss">
                                 <i class="fas fa-times"></i>
                             </a>
                         </div>

@@ -135,7 +135,7 @@
                                 </div>
                                 
                                 <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                                    <button type="submit" class="btn btn-primary px-4 shadow-sm" style="border-radius: var(--radius-md);">
+                                    <button type="submit" class="btn btn-primary px-4 shadow-sm">
                                         <i class="fas fa-save me-2"></i>Save Changes
                                     </button>
                                 </div>
@@ -175,7 +175,7 @@
                                 </div>
                                 
                                 <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                                    <button type="submit" class="btn btn-primary px-4 shadow-sm" style="border-radius: var(--radius-md);">
+                                    <button type="submit" class="btn btn-primary px-4 shadow-sm">
                                         <i class="fas fa-save me-2"></i>Save Theme
                                     </button>
                                 </div>
@@ -225,7 +225,7 @@
                                         <div class="input-group">
                                             <span class="input-group-text bg-dark border-secondary text-muted"><i class="fas fa-key"></i></span>
                                             <input type="text" class="form-control font-monospace " id="apiKey" name="api_key" value="{{ api_settings.api_key|default:'' }}" readonly>
-                                            <button class="btn btn-outline-primary" type="button" id="generateApiKey">
+                                            <button class="btn btn-glass" type="button" id="generateApiKey">
                                                 <i class="fas fa-sync-alt me-1"></i> Generate
                                             </button>
                                         </div>
@@ -234,7 +234,7 @@
                                 </div>
                                 
                                 <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                                    <button type="submit" class="btn btn-primary px-4 shadow-sm" style="border-radius: var(--radius-md);">
+                                    <button type="submit" class="btn btn-primary px-4 shadow-sm">
                                         <i class="fas fa-save me-2"></i>Save API Settings
                                     </button>
                                 </div>
@@ -266,7 +266,7 @@
                                 </div>
                                 
                                 <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
-                                    <button type="submit" class="btn btn-primary px-4 shadow-sm" style="border-radius: var(--radius-md);">
+                                    <button type="submit" class="btn btn-primary px-4 shadow-sm">
                                         <i class="fas fa-save me-2"></i>Save Configuration
                                     </button>
                                 </div>
@@ -277,7 +277,7 @@
                     <div class="premium-card">
                         <div class="card-header border-bottom border-secondary bg-transparent py-3 px-4 d-flex justify-content-between align-items-center">
                             <h5 class="mb-0 fw-bold"><i class="fas fa-terminal me-2 text-primary"></i> Live System Logs</h5>
-                            <button class="btn btn-sm btn-outline-info" id="btnRefreshLogs">
+                            <button class="btn btn-sm btn-glass" id="btnRefreshLogs">
                                 <i class="fas fa-sync-alt me-1"></i> Refresh
                             </button>
                         </div>
@@ -424,7 +424,7 @@
                                 <div class="row mb-3">
                                     <div class="col-12">
                                         <div id="mqttTestAlert" class="alert d-none" role="alert" style="border-radius: 8px;"></div>
-                                        <button type="button" id="btnTestConnection" class="btn btn-outline-info btn-sm" style="border-radius: 8px;">
+                                        <button type="button" id="btnTestConnection" class="btn btn-glass btn-sm">
                                             <i class="fas fa-network-wired me-1"></i> Test Connection
                                         </button>
                                     </div>
@@ -440,9 +440,9 @@
                                 
                                 <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-2">
                                     {% if machine_to_edit %}
-                                        <a href="{% url 'projects:settings' %}#list-machines" class="btn btn-outline-secondary px-4 shadow-sm" style="border-radius: var(--radius-md);">Cancel Edit</a>
+                                        <a href="{% url 'projects:settings' %}#list-machines" class="btn btn-glass px-4 shadow-sm">Cancel Edit</a>
                                     {% endif %}
-                                    <button type="submit" class="btn btn-primary px-4 shadow-sm" style="border-radius: var(--radius-md);">
+                                    <button type="submit" class="btn btn-primary px-4 shadow-sm">
                                         <i class="fas fa-save me-2"></i>{% if machine_to_edit %}Save Machine{% else %}Add Machine{% endif %}
                                     </button>
                                 </div>
@@ -492,10 +492,10 @@
                                                     </td>
                                                     <td><span class="text-muted"><i class="fas fa-cube me-1"></i>{{ machine.print_volume_x }} × {{ machine.print_volume_y }} × {{ machine.print_volume_z }}</span></td>
                                                     <td class="pe-4 text-end">
-                                                        <button type="button" class="btn btn-sm btn-outline-success me-1" title="View Traffic" onclick="openMachineTrafficModal({{ machine.id }}, '{{ machine.name|escapejs }}')">
+                                                        <button type="button" class="btn btn-sm btn-glass me-1" title="View Traffic" onclick="openMachineTrafficModal({{ machine.id }}, '{{ machine.name|escapejs }}')">
                                                             <i class="fas fa-network-wired"></i>
                                                         </button>
-                                                        <a href="?edit_machine={{ machine.id }}#list-machines" class="btn btn-sm btn-outline-info me-1" title="Edit {{ machine.name }}">
+                                                        <a href="?edit_machine={{ machine.id }}#list-machines" class="btn btn-sm btn-glass me-1" title="Edit {{ machine.name }}">
                                                             <i class="fas fa-edit"></i>
                                                         </a>
                                                         <form method="post" action="{% url 'projects:settings' %}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete {{ machine.name|escapejs }}?');">
@@ -553,7 +553,7 @@
             </div>
             <div class="modal-footer border-top border-secondary bg-darker">
                 <span class="text-muted small me-auto"><i class="fas fa-info-circle me-1"></i>Ensure System Log Level is set to DEBUG to see raw JSON payloads.</span>
-                <button type="button" class="btn btn-secondary shadow-sm" style="border-radius: var(--radius-md);" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-glass shadow-sm" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>

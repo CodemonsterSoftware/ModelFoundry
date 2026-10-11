@@ -12,7 +12,7 @@
                 <h1 class="fs-2 hero-title mb-1 fw-bold">{% if material %}Edit{% else %}New{% endif %} Material</h1>
                 <p class="text-muted mb-0 small">Configure your printing material specifications and properties.</p>
             </div>
-            <a href="{% url 'projects:material_list' %}" class="btn btn-outline-secondary" style="border-radius: 10px;">
+            <a href="{% url 'projects:material_list' %}" class="btn btn-glass">
                 <i class="fas fa-arrow-left me-2"></i>Back to Inventory
             </a>
         </div>
@@ -79,16 +79,16 @@
                 <hr class="my-4" style="border-color: var(--border-dark);">
 
                 <div class="d-flex justify-content-between align-items-center">
-                    <a href="{% url 'projects:material_list' %}" class="btn btn-outline-secondary rounded-pill px-4">
+                    <a href="{% url 'projects:material_list' %}" class="btn btn-glass px-4">
                         Cancel
                     </a>
                     <div class="d-flex gap-3">
                         {% if material %}
-                        <a href="{% url 'projects:material_delete' material.id %}" class="btn btn-outline-danger rounded-pill px-4">
+                        <a href="{% url 'projects:material_delete' material.id %}" class="btn btn-outline-danger px-4">
                             <i class="fas fa-trash me-2"></i>Delete
                         </a>
                         {% endif %}
-                        <button type="submit" class="btn btn-primary rounded-pill px-5 shadow-sm hover-lift">
+                        <button type="submit" class="btn btn-primary px-5 shadow-sm hover-lift">
                             <i class="fas fa-save me-2"></i>Save Material
                         </button>
                     </div>

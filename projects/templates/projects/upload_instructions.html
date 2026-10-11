@@ -164,7 +164,7 @@
             <p class="text-muted">Add instruction files (images, PDFs, or DOCX) to {{ project.name }}</p>
         </div>
         <div class="col text-end">
-            <a href="{% url 'projects:project_detail' project.pk %}" class="btn btn-outline-secondary">
+            <a href="{% url 'projects:project_detail' project.pk %}" class="btn btn-glass">
                 <i class="fas fa-arrow-left"></i> Back to Project
             </a>
         </div>
@@ -229,10 +229,10 @@
                 </div>
                 
                 <div class="d-flex justify-content-between mt-4">
-                    <a href="{% url 'projects:project_detail' project.pk %}" class="btn btn-outline-secondary rounded-3">
+                    <a href="{% url 'projects:project_detail' project.pk %}" class="btn btn-glass">
                         <i class="fas fa-times me-2"></i>Cancel
                     </a>
-                    <button type="submit" class="btn text-white rounded-3 shadow-sm" id="uploadBtn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; padding: 8px 24px;" disabled>
+                    <button type="submit" class="btn btn-success shadow-sm px-4" id="uploadBtn" disabled>
                         <i class="fas fa-check me-2"></i>Save & Finish
                     </button>
                 </div>
