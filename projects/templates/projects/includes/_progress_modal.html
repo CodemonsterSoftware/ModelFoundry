@@ -1,0 +1,67 @@
+{% comment %}Shared upload progress modal. Params: title, first_phase_label, optional title_icon, first_phase_status, show_footer (error text + resume button).{% endcomment %}
+<div class="modal fade upload-progress-modal" id="uploadProgressModal" tabindex="-1" aria-labelledby="uploadProgressModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog">
+        <div class="modal-content mf-modal">
+            <div class="modal-header border-bottom border-dark">
+                <h5 class="modal-title fw-bold" id="uploadProgressModalLabel">
+                    <i class="fas {{ title_icon|default:'fa-upload' }} me-2 text-primary"></i>{{ title }}
+                </h5>
+            </div>
+            <div class="modal-body">
+                <!-- Overall progress bar -->
+                <div class="progress mb-4" style="height: 8px;">
+                    <div class="progress-bar" role="progressbar" 
+                         id="uploadProgressBar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                    </div>
+                </div>
+
+                <!-- Phase stepper -->
+                <div class="d-flex flex-column gap-3">
+                    <!-- Phase 1: Upload -->
+                    <div class="phase-row d-flex align-items-center" id="phaseUpload">
+                        <div class="phase-icon me-3" id="phaseUploadIcon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size: 0.95rem;">{{ first_phase_label }}</div>
+                            <small class="text-muted" id="phaseUploadStatus">{{ first_phase_status|default:'Waiting...' }}</small>
+                        </div>
+                        <div class="phase-counter text-end" id="phaseUploadCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
+                    </div>
+
+                    <!-- Phase 2: Thumbnails -->
+                    <div class="phase-row d-flex align-items-center" id="phaseThumbnails">
+                        <div class="phase-icon me-3" id="phaseThumbnailsIcon">
+                            <i class="fas fa-image"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size: 0.95rem;">Generate Thumbnails</div>
+                            <small class="text-muted" id="phaseThumbnailsStatus">Waiting...</small>
+                        </div>
+                        <div class="phase-counter text-end" id="phaseThumbnailsCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
+                    </div>
+
+                    <!-- Phase 3: Volumes -->
+                    <div class="phase-row d-flex align-items-center" id="phaseVolumes">
+                        <div class="phase-icon me-3" id="phaseVolumesIcon">
+                            <i class="fas fa-cube"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold" style="font-size: 0.95rem;">Calculate Volumes</div>
+                            <small class="text-muted" id="phaseVolumesStatus">Waiting...</small>
+                        </div>
+                        <div class="phase-counter text-end" id="phaseVolumesCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
+                    </div>
+                </div>
+            </div>
+            {% if show_footer %}
+            <div class="modal-footer border-top border-dark d-flex align-items-center gap-2 py-3">
+                <small class="text-danger flex-grow-1" id="uploadErrorText"></small>
+                <button type="button" class="btn btn-primary btn-sm d-none" id="resumeUploadBtn">
+                    <i class="fas fa-redo me-1"></i>Resume Upload
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

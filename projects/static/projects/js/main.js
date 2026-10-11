@@ -17,9 +17,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const confirmForms = document.querySelectorAll('form[data-confirm]');
     confirmForms.forEach(form => {
         form.addEventListener('submit', function(e) {
-            if (!confirm(this.dataset.confirm)) {
-                e.preventDefault();
-            }
+            e.preventDefault();
+            MF.confirm({ message: form.dataset.confirm, danger: true }).then(ok => { if (ok) form.submit(); });
         });
     });
 

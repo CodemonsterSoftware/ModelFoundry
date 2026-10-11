@@ -1,0 +1,15 @@
+{% comment %}Shared empty state. Params: icon (FA class), title, text, optional action_label + (action_target modal id | action_url).{% endcomment %}
+<div class="empty-state-dashed">
+    <i class="fas {{ icon }} empty-icon"></i>
+    <h3 class="fw-bold">{{ title }}</h3>
+    <p class="text-muted{% if action_label %} mb-4{% else %} mb-0{% endif %}">{{ text }}</p>
+    {% if action_label %}
+    <div class="d-flex justify-content-center gap-3">
+        {% if action_target %}
+        <button type="button" class="btn btn-primary px-4 py-2" data-bs-toggle="modal" data-bs-target="#{{ action_target }}">{{ action_label }}</button>
+        {% elif action_url %}
+        <a href="{{ action_url }}" class="btn btn-primary px-4 py-2">{{ action_label }}</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>

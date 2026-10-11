@@ -151,18 +151,6 @@
     40%, 60% { transform: translate3d(4px, 0, 0); }
 }
 
-/* Dark theme variables */
-:root {
-    --bg-dark: #1a1a1a;
-    --bg-darker: #121212;
-    --bg-grey: #2d2d2d;
-    --text-light: #e0e0e0;
-    --text-muted: #a0a0a0;
-    --border-dark: #404040;
-    --primary-color: #0d6efd;
-    --border-color: var(--border-dark);
-}
-
 /* Premium Index Styling */
 .premium-index-wrapper {
     font-family: 'Inter', sans-serif;
