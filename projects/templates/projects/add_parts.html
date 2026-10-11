@@ -20,7 +20,7 @@
     color: var(--text-light) !important;
 }
 .editable-input:focus {
-    outline: 2px solid #0d6efd;
+    outline: 2px solid var(--primary-color);
     background: var(--bg-grey);
     color: var(--text-light) !important;
 }
@@ -46,7 +46,7 @@
 .sticky-header {
     position: sticky;
     top: 0;
-    background: rgba(30, 30, 30, 0.8);
+    background: var(--bg-grey);
     backdrop-filter: blur(10px);
     z-index: 1;
 }
@@ -72,7 +72,7 @@
 .upload-area.dragover {
     border-color: var(--primary-color);
     background: rgba(255, 255, 255, 0.05);
-    box-shadow: 0 0 15px rgba(13, 110, 253, 0.2);
+    box-shadow: 0 0 15px rgba(var(--primary-color-rgb), 0.2);
 }
 .table {
     color: var(--text-light) !important;
@@ -91,123 +91,6 @@
 .table-hover tbody tr:hover {
     background-color: rgba(255, 255, 255, 0.05) !important;
 }
-.upload-progress-modal {
-    z-index: 1060;
-}
-.upload-progress-modal .modal-content {
-    background-color: var(--bg-darker) !important;
-    border-color: var(--border-dark) !important;
-}
-.upload-progress-modal .modal-header {
-    background-color: var(--bg-grey) !important;
-    border-bottom-color: var(--border-dark) !important;
-    color: var(--text-light) !important;
-}
-.upload-progress-modal .modal-body {
-    background-color: var(--bg-darker) !important;
-    color: var(--text-light) !important;
-}
-.upload-progress-modal .progress {
-    background-color: var(--bg-grey);
-    border-radius: 5px;
-}
-.upload-progress-modal .progress-bar {
-    background: linear-gradient(90deg, var(--primary-color), #22d3ee);
-    transition: width 0.6s ease;
-}
-/* Phase stepper styles */
-.phase-row {
-    padding: 10px 12px;
-    border-radius: 10px;
-    background: rgba(255,255,255,0.02);
-    border: 1px solid transparent;
-    transition: all 0.3s ease;
-}
-.phase-row.active {
-    background: rgba(var(--primary-color-rgb, 74, 222, 128), 0.08);
-    border-color: rgba(var(--primary-color-rgb, 74, 222, 128), 0.25);
-}
-.phase-row.completed {
-    opacity: 0.7;
-}
-.phase-row.skipped {
-    opacity: 0.4;
-}
-.phase-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255,255,255,0.05);
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    transition: all 0.3s ease;
-    flex-shrink: 0;
-}
-.phase-row.active .phase-icon {
-    background: var(--primary-color);
-    color: #000;
-    box-shadow: 0 0 12px rgba(var(--primary-color-rgb, 74, 222, 128), 0.4);
-}
-.phase-row.completed .phase-icon {
-    background: var(--primary-color);
-    color: #000;
-}
-.phase-row.skipped .phase-icon {
-    background: rgba(255,255,255,0.05);
-    color: var(--text-muted);
-}
-.phase-counter {
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-}
-.no-hover {
-    transition: box-shadow 0.3s ease !important;
-    overflow: visible !important;
-}
-.no-hover:hover {
-    transform: none !important;
-}
-.no-hover::before {
-    display: none !important;
-}
-
-/* Floating Action Bar */
-.floating-action-bar {
-    position: fixed;
-    bottom: -100px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(20, 20, 20, 0.95);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 100px;
-    padding: 8px 16px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(var(--primary-color-rgb, 13, 110, 253), 0.15);
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    z-index: 1050;
-    transition: bottom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.floating-action-bar.visible {
-    bottom: 40px;
-}
-.fab-counter {
-    background: var(--primary-color);
-    color: #000;
-    font-weight: 700;
-    padding: 2px 10px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-}
-.fab-divider {
-    width: 1px;
-    height: 24px;
-    background: rgba(255,255,255,0.15);
-}
 .dropup .dropdown-menu {
     margin-bottom: 12px;
 }
@@ -224,7 +107,7 @@
             <p class="text-muted">Add multiple parts to {{ project.name }}</p>
         </div>
         <div class="col text-end">
-            <a href="{% url 'projects:project_detail' project.pk %}" class="btn btn-outline-secondary">
+            <a href="{% url 'projects:project_detail' project.pk %}" class="btn btn-glass">
                 <i class="fas fa-arrow-left"></i> Back to Project
             </a>
         </div>
@@ -256,7 +139,7 @@
         const AUTO_NAME_PARSING = {{ auto_name_parsing|yesno:"true,false" }};
     </script>
 
-    <div class="card premium-card border-0 mb-4 shadow-sm no-hover" style="border-radius: 12px;">
+    <div class="card premium-card border-0 mb-4 shadow-sm">
         <div class="card-body">
             <div class="upload-area" id="uploadArea">
                 <i class="fas fa-cloud-upload-alt fa-3x mb-3 text-primary"></i>
@@ -267,14 +150,14 @@
         </div>
     </div>
 
-    <div class="card premium-card border-0 shadow-lg no-hover" style="border-radius: 12px;">
+    <div class="card premium-card border-0 shadow-lg">
         <div class="card-header border-bottom border-secondary bg-transparent p-3">
             <div class="row align-items-center">
                 <div class="col-auto">
-                    <button type="button" class="btn text-white rounded-3 shadow-sm me-2" id="saveAll" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border: none; padding: 8px 20px;">
+                    <button type="button" class="btn btn-success shadow-sm me-2" id="saveAll">
                         <i class="fas fa-save me-2"></i>Save & Continue
                     </button>
-                    <button type="button" class="btn text-light rounded-3 shadow-sm" id="saveAndSkip" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); padding: 8px 20px;">
+                    <button type="button" class="btn btn-glass shadow-sm" id="saveAndSkip">
                         Save & Skip <i class="fas fa-forward ms-1"></i>
                     </button>
                 </div>
@@ -288,7 +171,7 @@
                     </div>
                 </div>
                 <div class="col-auto ms-auto">
-                    <button type="button" class="btn text-primary rounded-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#newGroupModal" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); backdrop-filter: blur(10px);">
+                    <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#newGroupModal">
                         <i class="fas fa-plus me-2"></i>New Group
                     </button>
                 </div>
@@ -308,6 +191,7 @@
                         </tr>
                     </thead>
                     <tbody>
+                        <tr class="empty-row"><td colspan="6" class="text-center text-muted py-5"><i class="fas fa-file-arrow-up fa-2x mb-2 d-block"></i>Drop STL, 3MF or ZIP files above to add parts</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -315,79 +199,15 @@
     </div>
 </div>
 
-<!-- Upload Progress Modal -->
-<div class="modal fade upload-progress-modal" id="uploadProgressModal" tabindex="-1" aria-labelledby="uploadProgressModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-    <div class="modal-dialog">
-        <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
-            <div class="modal-header border-bottom border-dark">
-                <h5 class="modal-title fw-bold" id="uploadProgressModalLabel">
-                    <i class="fas fa-upload me-2 text-primary"></i>Processing Parts
-                </h5>
-            </div>
-            <div class="modal-body">
-                <!-- Overall progress bar -->
-                <div class="progress mb-4" style="height: 8px;">
-                    <div class="progress-bar" role="progressbar" 
-                         id="uploadProgressBar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                    </div>
-                </div>
-
-                <!-- Phase stepper -->
-                <div class="d-flex flex-column gap-3">
-                    <!-- Phase 1: Upload -->
-                    <div class="phase-row d-flex align-items-center" id="phaseUpload">
-                        <div class="phase-icon me-3" id="phaseUploadIcon">
-                            <i class="fas fa-cloud-upload-alt"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold" style="font-size: 0.95rem;">Upload Files</div>
-                            <small class="text-muted" id="phaseUploadStatus">Waiting...</small>
-                        </div>
-                        <div class="phase-counter text-end" id="phaseUploadCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
-                    </div>
-
-                    <!-- Phase 2: Thumbnails -->
-                    <div class="phase-row d-flex align-items-center" id="phaseThumbnails">
-                        <div class="phase-icon me-3" id="phaseThumbnailsIcon">
-                            <i class="fas fa-image"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold" style="font-size: 0.95rem;">Generate Thumbnails</div>
-                            <small class="text-muted" id="phaseThumbnailsStatus">Waiting...</small>
-                        </div>
-                        <div class="phase-counter text-end" id="phaseThumbnailsCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
-                    </div>
-
-                    <!-- Phase 3: Volumes -->
-                    <div class="phase-row d-flex align-items-center" id="phaseVolumes">
-                        <div class="phase-icon me-3" id="phaseVolumesIcon">
-                            <i class="fas fa-cube"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <div class="fw-semibold" style="font-size: 0.95rem;">Calculate Volumes</div>
-                            <small class="text-muted" id="phaseVolumesStatus">Waiting...</small>
-                        </div>
-                        <div class="phase-counter text-end" id="phaseVolumesCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer border-top border-dark d-flex align-items-center gap-2 py-3">
-                <small class="text-danger flex-grow-1" id="uploadErrorText"></small>
-                <button type="button" class="btn btn-primary btn-sm d-none" id="resumeUploadBtn">
-                    <i class="fas fa-redo me-1"></i>Resume Upload
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+{% include 'projects/includes/_progress_modal.html' with title='Processing Parts' first_phase_label='Upload Files' show_footer=True %}
 
 <!-- New Group Modal -->
 <div class="modal fade" id="newGroupModal" tabindex="-1" aria-labelledby="newGroupModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+        <div class="modal-content mf-modal">
             <div class="modal-header border-bottom border-dark">
                 <h5 class="modal-title fw-bold" id="newGroupModalLabel">Create New Group</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="newGroupForm">
@@ -398,7 +218,7 @@
                 </form>
             </div>
             <div class="modal-footer border-top border-dark">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="createGroup">Create Group</button>
             </div>
         </div>
@@ -408,10 +228,10 @@
 <!-- New Material Modal -->
 <div class="modal fade" id="newMaterialModal" tabindex="-1" aria-labelledby="newMaterialModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+        <div class="modal-content mf-modal">
             <div class="modal-header border-bottom border-dark">
                 <h5 class="modal-title fw-bold" id="newMaterialModalLabel">Create New Material</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="newMaterialForm">
@@ -441,7 +261,7 @@
                 </form>
             </div>
             <div class="modal-footer border-top border-dark">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="saveNewMaterial">Save Material</button>
             </div>
         </div>
@@ -458,7 +278,7 @@
     <div class="fab-divider"></div>
     
     <div class="dropup">
-        <button class="btn btn-sm text-light d-flex align-items-center rounded-pill px-3 py-2" type="button" data-bs-toggle="dropdown" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s;">
+        <button class="btn btn-sm btn-glass d-flex align-items-center px-3 py-2" type="button" data-bs-toggle="dropdown">
             <i class="fas fa-fill-drip me-2 text-primary"></i>
             <span id="bulkMaterialText">Material...</span>
         </button>
@@ -470,7 +290,7 @@
     </div>
     
     <div class="dropup">
-        <button class="btn btn-sm text-light d-flex align-items-center rounded-pill px-3 py-2" type="button" data-bs-toggle="dropdown" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); transition: all 0.2s;">
+        <button class="btn btn-sm btn-glass d-flex align-items-center px-3 py-2" type="button" data-bs-toggle="dropdown">
             <i class="fas fa-layer-group me-2 text-info"></i>
             <span id="bulkGroupText">Group...</span>
         </button>
@@ -487,7 +307,7 @@
     
     <div class="fab-divider"></div>
     
-    <button type="button" class="btn btn-sm text-danger rounded-pill px-3 py-2" id="bulkDelete" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); transition: all 0.2s;">
+    <button type="button" class="btn btn-sm btn-outline-danger px-3 py-2" id="bulkDelete">
         <i class="fas fa-trash-alt me-1"></i> Delete
     </button>
 </div>
@@ -502,6 +322,16 @@ $(document).ready(function() {
     const $fileInput = $('#fileInput');
     const $table = $('#partsTable');
     let rowCount = 0;
+
+    // Placeholder row shown while the parts table is empty
+    function updateEmptyRow() {
+        const $tbody = $table.find('tbody');
+        if ($tbody.find('tr.part-row').length) {
+            $tbody.find('tr.empty-row').remove();
+        } else if (!$tbody.find('tr.empty-row').length) {
+            $tbody.append('<tr class="empty-row"><td colspan="6" class="text-center text-muted py-5"><i class="fas fa-file-arrow-up fa-2x mb-2 d-block"></i>Drop STL, 3MF or ZIP files above to add parts</td></tr>');
+        }
+    }
     
     // Handle click on upload area
     $uploadArea.on('click', function(e) {
@@ -614,7 +444,7 @@ $(document).ready(function() {
     // Entry folder paths are stripped; nested zips count as unsupported.
     async function extractZipFile(zipFile) {
         if (typeof fflate === 'undefined') {
-            alert('ZIP support failed to load on this page. Reload the page and try again.');
+            MF.toast('ZIP support failed to load on this page. Reload the page and try again.', 'warning');
             return;
         }
         let entries;
@@ -627,7 +457,7 @@ $(document).ready(function() {
         } catch (err) {
             console.error('ZIP extraction failed:', err);
             const detail = (err && err.message) ? err.message : String(err);
-            alert(`Could not read "${zipFile.name}": ${detail}`);
+            MF.toast(`Could not read "${zipFile.name}": ${detail}`, 'warning');
             return;
         }
         let added = 0;
@@ -640,7 +470,7 @@ $(document).ready(function() {
             added++;
         });
         if (added === 0) {
-            alert(`No 3D files (stl/obj/3mf) found in "${zipFile.name}".`);
+            MF.toast(`No 3D files (stl/obj/3mf) found in "${zipFile.name}".`, 'warning');
         }
     }
     
@@ -724,7 +554,7 @@ $(document).ready(function() {
         if (AUTO_NAME_PARSING && (SIDE_RE.test(name) || stripMirrorToken(fileName) !== fileName.trim())) {
             const counterpartName = mirrorCounterpartName(name);
             let hasCounterpart = false;
-            $table.find('tbody tr').each(function() {
+            $table.find('tbody tr.part-row').each(function() {
                 if ($(this).find('[name="name"]').val().trim() === counterpartName) {
                     hasCounterpart = true;
                 }
@@ -740,10 +570,11 @@ $(document).ready(function() {
 
         $table.find('tbody').append($newRow);
         rowCount++;
+        updateEmptyRow();
 
         // If this row provides a counterpart for an earlier auto-checked row,
         // both files are real parts now — disable that row's mirror toggle
-        $table.find('tbody tr').each(function() {
+        $table.find('tbody tr.part-row').each(function() {
             const $other = $(this);
             if ($other.attr('data-id') === $newRow.attr('data-id')) return;
             const $toggle = $other.find('.mirror-toggle');
@@ -820,9 +651,13 @@ $(document).ready(function() {
 
     // Delete selected rows via FAB
     $('#bulkDelete').click(function() {
-        $table.find('.row-select:checked').closest('tr').remove();
-        updateBulkActionBar();
-        $('#selectAll').prop('checked', false);
+        MF.confirm({title: 'Remove selected rows?', message: 'The selected rows will be removed from this upload.', confirmLabel: 'Remove', danger: true}).then(ok => {
+            if (!ok) return;
+            $table.find('.row-select:checked').closest('tr').remove();
+            updateEmptyRow();
+            updateBulkActionBar();
+            $('#selectAll').prop('checked', false);
+        });
     });
 
     // Populate bulk material dropdown using materialsData
@@ -880,37 +715,6 @@ $(document).ready(function() {
         window.location.href = skipInstructions
             ? '{% url "projects:project_detail" project.pk %}'
             : '{% url "projects:upload_instructions" project.pk %}';
-    }
-
-    // Phase stepper helpers
-    function setPhase(phaseName, status) {
-        ['Upload', 'Thumbnails', 'Volumes'].forEach(p => {
-            $(`#phase${p}`).removeClass('active completed skipped');
-        });
-
-        const phaseOrder = ['Upload', 'Thumbnails', 'Volumes'];
-        const idx = phaseOrder.indexOf(phaseName);
-
-        for (let i = 0; i < idx; i++) {
-            $(`#phase${phaseOrder[i]}`).addClass('completed');
-            $(`#phase${phaseOrder[i]}Icon`).html('<i class="fas fa-check"></i>');
-        }
-
-        if (phaseName !== 'complete') {
-            $(`#phase${phaseName}`).addClass('active');
-            $(`#phase${phaseName}Status`).text(status);
-        } else {
-            phaseOrder.forEach(p => {
-                $(`#phase${p}`).removeClass('active').addClass('completed');
-                $(`#phase${p}Icon`).html('<i class="fas fa-check"></i>');
-            });
-        }
-    }
-
-    function markSkipped(phaseName, reason) {
-        $(`#phase${phaseName}`).removeClass('active').addClass('skipped');
-        $(`#phase${phaseName}Icon`).html('<i class="fas fa-forward"></i>');
-        $(`#phase${phaseName}Status`).text(reason || 'Skipped');
     }
 
     function showUploadError(message) {
@@ -990,7 +794,7 @@ $(document).ready(function() {
     function onAllChunksDone() {
         $('#uploadProgressBar').css('width', '33%').attr('aria-valuenow', 33);
         $('#phaseUploadCounter').text(`${uploadState.fileRows} / ${uploadState.fileRows}`);
-        setPhase('Upload', 'Complete');
+        MF.setPhase('Upload', 'Complete');
         $('#phaseUpload').removeClass('active').addClass('completed');
         $('#phaseUploadIcon').html('<i class="fas fa-check"></i>');
 
@@ -1002,7 +806,7 @@ $(document).ready(function() {
             return;
         }
 
-        setPhase('Thumbnails', 'Starting...');
+        MF.setPhase('Thumbnails', 'Starting...');
         $('#phaseThumbnailsCounter').text(`0 / ${totalParts}`);
         $('#phaseVolumesCounter').text(`0 / ${totalParts}`);
 
@@ -1022,32 +826,32 @@ $(document).ready(function() {
                 // Handle skipped phases
                 skippedPhases.forEach(function(s) {
                     if (s.phase === 'thumbnails') {
-                        markSkipped('Thumbnails', s.reason || 'Skipped');
+                        MF.markSkipped('Thumbnails', s.reason || 'Skipped');
                     }
                 });
 
                 // Update phase stepper based on current phase
                 if (phase === 'upload') {
-                    setPhase('Upload', data.status || 'Processing files...');
+                    MF.setPhase('Upload', data.status || 'Processing files...');
                 } else if (phase === 'thumbnails') {
                     const isSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
                     if (!isSkipped) {
-                        setPhase('Thumbnails', data.status || 'Rendering...');
+                        MF.setPhase('Thumbnails', data.status || 'Rendering...');
                         $('#phaseThumbnailsCounter').text(`${completed} / ${total}`);
                     }
                 } else if (phase === 'volumes') {
                     const thumbSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
                     if (thumbSkipped) {
-                        markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                        MF.markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
                     } else {
                         $(`#phaseThumbnails`).removeClass('active').addClass('completed');
                         $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
                         $(`#phaseThumbnailsStatus`).text('Complete');
                         $(`#phaseThumbnailsCounter`).text(`${total} / ${total}`);
                     }
-                    setPhase('Volumes', data.status || 'Calculating...');
+                    MF.setPhase('Volumes', data.status || 'Calculating...');
                     if (thumbSkipped) {
-                        markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                        MF.markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
                     } else {
                         $(`#phaseThumbnails`).removeClass('active').addClass('completed');
                         $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
@@ -1064,7 +868,7 @@ $(document).ready(function() {
                     $(`#phaseUploadStatus`).text('Complete');
 
                     if (thumbSkipped) {
-                        markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                        MF.markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
                     } else {
                         $(`#phaseThumbnails`).removeClass('active skipped').addClass('completed');
                         $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
@@ -1104,7 +908,7 @@ $(document).ready(function() {
         const originalHtml = $btn.html();
         const parts = [];
 
-        $table.find('tbody tr').each(function() {
+        $table.find('tbody tr.part-row').each(function() {
             const $row = $(this);
             const file = $row.data('file');
 
@@ -1119,15 +923,15 @@ $(document).ready(function() {
 
             // Validate required fields
             if (!partData.name) {
-                alert('Please enter a name for all parts');
+                MF.toast('Please enter a name for all parts', 'warning');
                 return false;
             }
             if (isNaN(partData.quantity) || partData.quantity < 1) {
-                alert('Please enter a valid quantity (minimum 1) for all parts');
+                MF.toast('Please enter a valid quantity (minimum 1) for all parts', 'warning');
                 return false;
             }
             if (!partData.material) {
-                alert('Please select a material for all parts');
+                MF.toast('Please select a material for all parts', 'warning');
                 return false;
             }
 
@@ -1148,7 +952,7 @@ $(document).ready(function() {
         });
 
         if (parts.length === 0) {
-            alert('Please add at least one part');
+            MF.toast('Please add at least one part', 'warning');
             return false;
         }
 
@@ -1166,7 +970,7 @@ $(document).ready(function() {
             success: function(response) {
                 if (response.status !== 'success') {
                     progressModal.hide();
-                    alert('Error saving parts: ' + (response.message || 'Unknown error'));
+                    MF.toast('Error saving parts: ' + (response.message || 'Unknown error'), 'error');
                     $btn.html(originalHtml).prop('disabled', false);
                     return;
                 }
@@ -1183,7 +987,7 @@ $(document).ready(function() {
                 // Build chunks from rows that carry a file (≤10 files / ≤256MB each)
                 let chunk = [];
                 let chunkBytes = 0;
-                $table.find('tbody tr').each(function(idx) {
+                $table.find('tbody tr.part-row').each(function(idx) {
                     const row = response.rows[idx];
                     if (!row || !row.has_file) return;
                     const file = $(this).data('file');
@@ -1201,7 +1005,7 @@ $(document).ready(function() {
                 uploadState.fileRows = response.rows.filter(r => r.has_file).length;
                 const fileCount = uploadState.fileRows;
 
-                setPhase('Upload', `Uploading ${fileCount} file${fileCount !== 1 ? 's' : ''}...`);
+                MF.setPhase('Upload', `Uploading ${fileCount} file${fileCount !== 1 ? 's' : ''}...`);
                 $('#uploadProgressBar').css('width', '2%').attr('aria-valuenow', 2);
                 $('#phaseUploadCounter').text(`0 / ${fileCount}`);
 
@@ -1215,7 +1019,7 @@ $(document).ready(function() {
                     const response = JSON.parse(xhr.responseText);
                     if (response && response.message) errorMessage = response.message;
                 } catch (e) {}
-                alert(errorMessage);
+                MF.toast(errorMessage, 'error');
                 $btn.html(originalHtml).prop('disabled', false);
             }
         });
@@ -1254,7 +1058,7 @@ $(document).ready(function() {
     $('#createGroup').click(function() {
         const groupName = $('#groupName').val().trim();
         if (!groupName) {
-            alert('Please enter a group name');
+            MF.toast('Please enter a group name', 'warning');
             return;
         }
 
@@ -1284,11 +1088,11 @@ $(document).ready(function() {
                     $('#newGroupModal').modal('hide');
                     $('#newGroupForm')[0].reset();
                 } else {
-                    alert('Error: ' + (response.message || 'Failed to create group'));
+                    MF.toast('Error: ' + (response.message || 'Failed to create group'), 'error');
                 }
             },
             error: function(xhr) {
-                alert('Error creating group. Please try again.');
+                MF.toast('Error creating group. Please try again.', 'error');
             },
             complete: function() {
                 $btn.html(originalHtml).prop('disabled', false);
@@ -1315,7 +1119,7 @@ $(document).ready(function() {
         const targetRowId = $('#materialTargetRowId').val();
 
         if (!materialName) {
-            alert('Please enter a material name');
+            MF.toast('Please enter a material name', 'warning');
             return;
         }
 
@@ -1365,7 +1169,7 @@ $(document).ready(function() {
                     $('#newMaterialModal').modal('hide');
                     $('#newMaterialForm')[0].reset();
                 } else {
-                    alert('Error: ' + (response.message || 'Failed to create material'));
+                    MF.toast('Error: ' + (response.message || 'Failed to create material'), 'error');
                 }
             },
             error: function(xhr) {
@@ -1376,7 +1180,7 @@ $(document).ready(function() {
                         errorMsg = response.message;
                     }
                 } catch (e) {}
-                alert(errorMsg);
+                MF.toast(errorMsg, 'error');
             },
             complete: function() {
                 $btn.html(originalHtml).prop('disabled', false);

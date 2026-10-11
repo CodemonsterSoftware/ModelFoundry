@@ -16,16 +16,6 @@
     .hover-zoom:hover {
         transform: scale(1.02);
     }
-    /* Disable card hover effects for large layout cards on this page */
-    .premium-card:hover {
-        transform: none !important;
-        box-shadow: none !important;
-        border-color: var(--border-dark) !important;
-    }
-    .premium-card::before {
-        display: none !important;
-    }
-
     /* Standardize card header heights so those without buttons match those with buttons */
     .premium-card .card-header {
         min-height: 56px;
@@ -139,7 +129,7 @@
     }
 
     #instructionsGallery .instruction-description h6 {
-        color: #ffc107;
+        color: var(--primary-color);
         margin-bottom: 0.5rem;
     }
 
@@ -172,7 +162,8 @@
         transition: opacity 0.2s ease;
     }
     
-    .part-row:hover .view-btn {
+    .part-row:hover .view-btn,
+    .part-row:focus-within .view-btn {
         opacity: 1;
     }
 
@@ -250,23 +241,11 @@
         text-transform: uppercase;
     }
     
-    .hero-info .btn-primary,
-    .hero-info .btn-secondary {
-        transition: all 0.3s ease;
-    }
-    
     .hero-info .btn-primary {
-        box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
+        box-shadow: 0 0 15px rgba(var(--primary-color-rgb), 0.3);
     }
     .hero-info .btn-primary:hover {
-        box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
-    }
-    
-    .hero-info .btn-secondary {
-        box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
-    }
-    .hero-info .btn-secondary:hover {
-        box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+        box-shadow: 0 0 20px rgba(var(--primary-color-rgb), 0.6);
     }
     
     /* Stat Tile Vibe */
@@ -299,7 +278,7 @@
     }
     
     .stat-label {
-        color: #94a3b8;
+        color: var(--text-muted);
         font-size: 0.7rem;
         font-weight: 600;
         letter-spacing: 0.05em;
@@ -308,7 +287,7 @@
     }
     
     .stat-value {
-        color: #ffffff;
+        color: var(--text-light);
         font-weight: 700;
         font-size: 0.95rem;
         line-height: 1.2;
@@ -421,101 +400,6 @@
         transform: scale(1.2);
     }
 
-    /* Bulk Action Bar styles */
-    .bulk-action-bar {
-        position: fixed;
-        bottom: -100px; /* Hidden initially */
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(30, 30, 35, 0.95);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-        padding: 12px 24px;
-        z-index: 1050;
-        transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        display: flex;
-        align-items: center;
-        gap: 16px;
-    }
-    .bulk-action-bar.visible {
-        bottom: 30px;
-    }
-
-    /* Progress Modal & Stepper Styles */
-    .upload-progress-modal {
-        z-index: 1060;
-    }
-    .upload-progress-modal .modal-content {
-        background-color: var(--bg-darker) !important;
-        border-color: var(--border-dark) !important;
-    }
-    .upload-progress-modal .modal-header {
-        background-color: var(--bg-grey) !important;
-        border-bottom-color: var(--border-dark) !important;
-        color: var(--text-light) !important;
-    }
-    .upload-progress-modal .modal-body {
-        background-color: var(--bg-darker) !important;
-        color: var(--text-light) !important;
-    }
-    .upload-progress-modal .progress {
-        background-color: var(--bg-grey);
-        border-radius: 5px;
-    }
-    .upload-progress-modal .progress-bar {
-        background: linear-gradient(90deg, var(--primary-color), #22d3ee);
-        transition: width 0.6s ease;
-    }
-    .phase-row {
-        padding: 10px 12px;
-        border-radius: 10px;
-        background: rgba(255,255,255,0.02);
-        border: 1px solid transparent;
-        transition: all 0.3s ease;
-    }
-    .phase-row.active {
-        background: rgba(var(--primary-color-rgb, 74, 222, 128), 0.08);
-        border-color: rgba(var(--primary-color-rgb, 74, 222, 128), 0.25);
-    }
-    .phase-row.completed {
-        opacity: 0.7;
-    }
-    .phase-row.skipped {
-        opacity: 0.4;
-    }
-    .phase-icon {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: rgba(255,255,255,0.05);
-        color: var(--text-muted);
-        font-size: 0.9rem;
-        transition: all 0.3s ease;
-        flex-shrink: 0;
-    }
-    .phase-row.active .phase-icon {
-        background: var(--primary-color);
-        color: #000;
-        box-shadow: 0 0 12px rgba(var(--primary-color-rgb, 74, 222, 128), 0.4);
-    }
-    .phase-row.completed .phase-icon {
-        background: var(--primary-color);
-        color: #000;
-    }
-    .phase-row.skipped .phase-icon {
-        background: rgba(255,255,255,0.05);
-        color: var(--text-muted);
-    }
-    .phase-counter {
-        color: var(--text-muted);
-        font-variant-numeric: tabular-nums;
-    }
 </style>
 {% endblock %}
 
@@ -576,10 +460,10 @@
 
             <!-- Action Buttons -->
             <div class="d-flex align-items-center gap-3 mt-auto pt-4">
-                <a href="{% url 'projects:export_project' project.id %}" class="btn btn-primary" style="border-radius: 8px; padding: 0.5rem 1.5rem; font-weight: 600;">
+                <a href="{% url 'projects:export_project' project.id %}" class="btn btn-primary px-4 fw-semibold">
                     <i class="fas fa-file-export me-1"></i> Export
                 </a>
-                <a href="{% url 'projects:project_update' project.id %}" class="btn btn-secondary " style="border-radius: 8px; padding: 0.5rem 1.5rem; font-weight: 600;">
+                <a href="{% url 'projects:project_update' project.id %}" class="btn btn-glass px-4 fw-semibold">
                     <i class="fas fa-edit me-1"></i> Edit
                 </a>
             </div>
@@ -608,7 +492,7 @@
             {% else %}
             <div class="d-flex align-items-center justify-content-center h-100 w-100 bg-dark bg-opacity-50">
                 <div class="text-center">
-                    <i class="fas fa-images empty-icon mb-2 text-muted" style="font-size: 2rem;"></i>
+                    <i class="fas fa-images fa-2x empty-icon mb-2 text-muted"></i>
                     <h5 class="fw-bold text-muted">No images uploaded</h5>
                 </div>
             </div>
@@ -618,11 +502,11 @@
 
     <!-- Parts Section -->
     <div class="card premium-card mb-4 animate-enter" style="animation-delay: 200ms;">
-        <div class="card-header border-bottom border-dark d-flex justify-content-between align-items-center" style="background-color: transparent;">
+        <div class="card-header border-bottom border-dark d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold"><i class="fas fa-puzzle-piece me-2 text-primary"></i>Parts</h5>
             <div class="d-flex gap-2">
                 <div class="dropdown">
-                    <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="reprocessDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 8px;">
+                    <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="reprocessDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="fas fa-magic me-1"></i> Process STL
                     </button>
                     <ul class="dropdown-menu dropdown-menu-dark border-secondary" aria-labelledby="reprocessDropdown" style="font-size: 0.85rem; border-radius: 8px; background-color: var(--bg-dark);">
@@ -643,18 +527,18 @@
                         </li>
                     </ul>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleBulkEditBtn" style="border-radius: 8px;">
+                <button type="button" class="btn btn-sm btn-glass" id="toggleBulkEditBtn">
                     <i class="fas fa-tasks"></i> Bulk Edit
                 </button>
-                <a href="{% url 'projects:add_multiple_parts' project.pk %}" class="btn btn-sm btn-primary" style="border-radius: 8px;">
+                <a href="{% url 'projects:add_multiple_parts' project.pk %}" class="btn btn-sm btn-primary">
                     <i class="fas fa-plus"></i> Add Parts
                 </a>
             </div>
         </div>
         <div class="card-body p-0">
             <div>
-                <table class="table table-hover border-top-0 mb-0">
-                    <thead style="background-color: rgba(0,0,0,0.2);">
+                <table class="table table-hover mf-table border-top-0 mb-0">
+                    <thead>
                         <tr>
                             <th class="border-top-0 bulk-edit-col" style="width: 40px; display: none;">
                                 <input class="form-check-input" type="checkbox" id="selectAllParts">
@@ -676,13 +560,13 @@
                         {% for part in group.list %}
                         {% if not part.parent %}
                         <tr data-completed="{{ part.completed }}" data-quantity="{{ part.quantity }}" data-part-id="{{ part.id }}"
-                            class="part-row {% if part.sub_parts.all %}toggle-parent{% else %}view-part{% endif %} {% if part.completed == part.quantity %}completed-row{% endif %}" style="transition: all 0.2s ease;">
+                            class="part-row {% if part.sub_parts.all %}toggle-parent{% else %}view-part{% endif %} {% if part.completed == part.quantity %}completed-row{% endif %}">
                             <td class="align-middle text-center bulk-edit-col" style="display: none;" onclick="event.stopPropagation();">
                                 <input class="form-check-input part-checkbox" type="checkbox" value="{{ part.id }}">
                             </td>
                             <td class="align-middle position-relative text-start">
                                 <!-- Status Strip -->
-                                <div class="status-strip {% if part.completed == part.quantity %}bg-success{% elif part.completed > 0 %}bg-primary{% else %}bg-secondary opacity-50{% endif %}" style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px;"></div>
+                                <div class="status-strip {% if part.completed == part.quantity %}bg-success{% elif part.completed > 0 %}bg-primary{% else %}bg-secondary opacity-50{% endif %}"></div>
                                 
                                 <div class="d-flex align-items-center ps-3">
                                     {% if part.thumbnail %}
@@ -693,7 +577,7 @@
                                         </div>
                                     </div>
                                     {% else %}
-                                    <div class="me-3 rounded bg-dark d-flex align-items-center justify-content-center shadow-sm" style="width: 36px; height: 36px; border: 1px solid var(--border-dark);">
+                                    <div class="me-3 thumb-placeholder shadow-sm">
                                         <i class="fas fa-cube text-muted"></i>
                                     </div>
                                     {% endif %}
@@ -706,7 +590,7 @@
                                         </div>
                                         <div class="d-flex align-items-center mt-1">
                                             {% if part.color %}
-                                            <span class="badge shadow-sm me-2" style="background-color: {{ part.color }}; width: 10px; height: 10px; padding: 0; border-radius: 50%; display: inline-block; border: 1px solid var(--border-dark);" title="{{ part.color|color_name }}"></span>
+                                            <span class="color-dot shadow-sm me-2" style="background-color: {{ part.color }};" title="{{ part.color|color_name }}"></span>
                                             {% endif %}
                                             <small class="text-muted" style="font-size: 0.75rem;">{{ part.material|default:"No Material" }}</small>
                                         </div>
@@ -736,7 +620,7 @@
                                 {% endif %}
                             </td>
                             <td class="align-middle text-center pe-4">
-                                <button class="btn btn-sm btn-outline-primary view-btn" style="border-radius: 6px;" title="View Details">
+                                <button class="btn btn-sm btn-glass view-btn" title="View Details">
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </td>
@@ -745,13 +629,13 @@
                         <!-- Child Parts -->
                         {% for child in part.sub_parts.all %}
                         <tr data-completed="{{ child.completed }}" data-quantity="{{ child.quantity }}" data-part-id="{{ child.id }}"
-                            class="part-row view-part child-row child-of-{{ part.id }} {% if child.completed == child.quantity %}completed-row{% endif %}" style="transition: all 0.2s ease; background: rgba(0,0,0,0.1);">
+                            class="part-row view-part child-row child-of-{{ part.id }} {% if child.completed == child.quantity %}completed-row{% endif %}" style="background: rgba(0,0,0,0.1);">
                             <td class="align-middle text-center bulk-edit-col" style="display: none;" onclick="event.stopPropagation();">
                                 <input class="form-check-input part-checkbox" type="checkbox" value="{{ child.id }}">
                             </td>
                             <td class="align-middle position-relative text-start">
                                 <!-- Status Strip -->
-                                <div class="status-strip {% if child.completed == child.quantity %}bg-success{% elif child.completed > 0 %}bg-primary{% else %}bg-secondary opacity-50{% endif %}" style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px;"></div>
+                                <div class="status-strip {% if child.completed == child.quantity %}bg-success{% elif child.completed > 0 %}bg-primary{% else %}bg-secondary opacity-50{% endif %}"></div>
                                 
                                 <div class="d-flex align-items-center ps-5"> <!-- ps-5 for indent -->
                                     {% if child.thumbnail %}
@@ -762,7 +646,7 @@
                                         </div>
                                     </div>
                                     {% else %}
-                                    <div class="me-3 rounded bg-dark d-flex align-items-center justify-content-center shadow-sm" style="width: 28px; height: 28px; border: 1px solid var(--border-dark);">
+                                    <div class="me-3 thumb-placeholder thumb-placeholder-sm shadow-sm">
                                         <i class="fas fa-cube text-muted" style="font-size: 0.75rem;"></i>
                                     </div>
                                     {% endif %}
@@ -773,7 +657,7 @@
                                         </div>
                                         <div class="d-flex align-items-center mt-1">
                                             {% if child.color %}
-                                            <span class="badge shadow-sm me-2" style="background-color: {{ child.color }}; width: 8px; height: 8px; padding: 0; border-radius: 50%; display: inline-block; border: 1px solid var(--border-dark);" title="{{ child.color|color_name }}"></span>
+                                            <span class="color-dot color-dot-sm shadow-sm me-2" style="background-color: {{ child.color }};" title="{{ child.color|color_name }}"></span>
                                             {% endif %}
                                             <small class="text-muted" style="font-size: 0.7rem;">{{ child.material|default:"No Material" }}</small>
                                         </div>
@@ -799,7 +683,7 @@
                                 </div>
                             </td>
                             <td class="align-middle text-center pe-4">
-                                <button class="btn btn-sm btn-outline-primary view-btn" style="border-radius: 6px;" title="View Details">
+                                <button class="btn btn-sm btn-glass view-btn" title="View Details">
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </td>
@@ -810,13 +694,14 @@
                         {% endfor %}
                         {% empty %}
                         <tr>
-                            <td colspan="5" class="text-center py-4">
-                                <span class="text-muted"><i class="fas fa-info-circle me-1"></i>No parts added yet.</span>
+                            <td colspan="5" class="p-4">
+                                {% url 'projects:add_multiple_parts' project.pk as add_parts_url %}
+                                {% include 'projects/includes/_empty_state.html' with icon='fa-cubes' title='No parts yet' text='Add STL or 3MF files to start tracking this build.' action_label='Add Parts' action_url=add_parts_url %}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
-                    <tfoot style="background-color: rgba(0,0,0,0.3); border-top: 2px solid var(--border-dark);">
+                    <tfoot>
                         <tr>
                             <td class="bulk-edit-col" style="display: none;"></td>
                             <td class="py-3 text-start fw-bold "><span class="ps-4 ms-3">Printed Parts Total</span></td>
@@ -832,16 +717,16 @@
 
     <!-- Purchased Parts Section -->
     <div class="card premium-card mb-5 animate-enter" style="animation-delay: 300ms;">
-        <div class="card-header border-bottom border-dark d-flex justify-content-between align-items-center" style="background-color: transparent;">
+        <div class="card-header border-bottom border-dark d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold"><i class="fas fa-shopping-cart me-2 text-success"></i>Purchased Parts</h5>
-            <a href="{% url 'projects:add_purchased_part' project.pk %}" class="btn btn-sm btn-primary" style="border-radius: 8px;">
+            <a href="{% url 'projects:add_purchased_part' project.pk %}" class="btn btn-sm btn-primary">
                 <i class="fas fa-plus"></i> Add Purchased Part
             </a>
         </div>
         <div class="card-body p-0">
             <div>
-                <table class="table table-hover border-top-0 mb-0">
-                    <thead style="background-color: rgba(0,0,0,0.2);">
+                <table class="table table-hover mf-table border-top-0 mb-0">
+                    <thead>
                         <tr>
                             <th class="border-top-0 ps-4 text-start">Part</th>
                             <th class="border-top-0">Price</th>
@@ -854,12 +739,12 @@
                     </thead>
                     <tbody>
                         {% for part in purchased_parts %}
-                        <tr class="part-row" style="transition: all 0.2s ease; position: relative;">
+                        <tr class="part-row" style="position: relative;">
                             <td class="align-middle position-relative text-start">
                                 <!-- Status Strip -->
-                                <div class="status-strip {% if part.status == 'received' %}bg-success{% elif part.status == 'ordered' %}bg-primary{% else %}bg-secondary opacity-50{% endif %}" style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px;"></div>
+                                <div class="status-strip {% if part.status == 'received' %}bg-success{% elif part.status == 'ordered' %}bg-primary{% else %}bg-secondary opacity-50{% endif %}"></div>
                                 <div class="d-flex align-items-center ps-3">
-                                    <div class="me-3 rounded bg-dark d-flex align-items-center justify-content-center shadow-sm" style="width: 36px; height: 36px; border: 1px solid var(--border-dark);">
+                                    <div class="me-3 thumb-placeholder shadow-sm">
                                         <i class="fas fa-shopping-bag text-muted"></i>
                                     </div>
                                     <div>
@@ -880,7 +765,7 @@
                                 {% endif %}
                             </td>
                             <td class="align-middle text-center" style="width: 150px;">
-                                <select class="form-select form-select-sm status-select" data-part-id="{{ part.id }}" style="border-radius: 6px; background-color: var(--bg-darker); border-color: var(--border-dark); color: var(--);">
+                                <select class="form-select form-select-sm status-select" data-part-id="{{ part.id }}" style="background-color: var(--bg-darker); border-color: var(--border-dark); color: var(--text-muted);">
                                     {% for value, label in PurchasedPart.STATUS_CHOICES %}
                                     <option value="{{ value }}" {% if part.status == value %}selected{% endif %}>
                                         {{ label }}
@@ -889,22 +774,22 @@
                                 </select>
                             </td>
                             <td class="align-middle text-center pe-4">
-                                <button class="btn btn-sm btn-outline-primary view-btn view-purchased-part"
+                                <button class="btn btn-sm btn-glass view-btn view-purchased-part"
                                     data-part-id="{{ part.id }}" data-bs-toggle="modal"
-                                    data-bs-target="#purchasedPartDetailsModal" style="border-radius: 6px;" title="View Details">
+                                    data-bs-target="#purchasedPartDetailsModal" title="View Details">
                                     <i class="fas fa-eye"></i>
                                 </button>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center py-4">
-                                <span class="text-muted"><i class="fas fa-info-circle me-1"></i>No purchased parts added yet.</span>
+                            <td colspan="7" class="p-4">
+                                {% include 'projects/includes/_empty_state.html' with icon='fa-cart-shopping' title='No purchased parts' text='Track hardware like screws, magnets or electronics here.' %}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
-                    <tfoot style="background-color: rgba(0,0,0,0.3); border-top: 2px solid var(--border-dark);">
+                    <tfoot>
                         <tr>
                             <td class="py-3 text-start fw-bold "><span class="ps-4 ms-3">Purchased Parts Total</span></td>
                             <td colspan="2"></td>
@@ -923,7 +808,7 @@
     <div class="modal fade" id="purchasedPartDetailsModal" tabindex="-1"
         aria-labelledby="purchasedPartDetailsModalLabel" aria-hidden="true">
         <div class="modal-dialog">
-            <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+            <div class="modal-content mf-modal">
                 <div class="modal-header border-bottom border-dark">
                     <h5 class="modal-title fw-bold" id="purchasedPartDetailsModalLabel">Purchased Part Details</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -963,7 +848,7 @@
                     <button type="button" class="btn btn-outline-danger" id="removePurchasedPart">
                         <i class="fas fa-trash"></i> Remove Part
                     </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary" id="savePurchasedPartChanges">Save Changes</button>
                 </div>
             </div>
@@ -971,70 +856,13 @@
     </div>
 
     <!-- Reprocess Progress Modal -->
-    <div class="modal fade upload-progress-modal" id="uploadProgressModal" tabindex="-1" aria-labelledby="uploadProgressModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog">
-            <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
-                <div class="modal-header border-bottom border-dark">
-                    <h5 class="modal-title fw-bold" id="uploadProgressModalLabel">
-                        <i class="fas fa-magic me-2 text-primary"></i>Processing Parts
-                    </h5>
-                </div>
-                <div class="modal-body">
-                    <!-- Overall progress bar -->
-                    <div class="progress mb-4" style="height: 8px;">
-                        <div class="progress-bar" role="progressbar" 
-                             id="uploadProgressBar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                        </div>
-                    </div>
-
-                    <!-- Phase stepper -->
-                    <div class="d-flex flex-column gap-3">
-                        <!-- Phase 1: Upload (always complete for reprocess) -->
-                        <div class="phase-row d-flex align-items-center" id="phaseUpload">
-                            <div class="phase-icon me-3" id="phaseUploadIcon">
-                                <i class="fas fa-cloud-upload-alt"></i>
-                            </div>
-                            <div class="flex-grow-1">
-                                <div class="fw-semibold" style="font-size: 0.95rem;">Prepare Files</div>
-                                <small class="text-muted" id="phaseUploadStatus">Complete</small>
-                            </div>
-                            <div class="phase-counter text-end" id="phaseUploadCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
-                        </div>
-
-                        <!-- Phase 2: Thumbnails -->
-                        <div class="phase-row d-flex align-items-center" id="phaseThumbnails">
-                            <div class="phase-icon me-3" id="phaseThumbnailsIcon">
-                                <i class="fas fa-image"></i>
-                            </div>
-                            <div class="flex-grow-1">
-                                <div class="fw-semibold" style="font-size: 0.95rem;">Generate Thumbnails</div>
-                                <small class="text-muted" id="phaseThumbnailsStatus">Waiting...</small>
-                            </div>
-                            <div class="phase-counter text-end" id="phaseThumbnailsCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
-                        </div>
-
-                        <!-- Phase 3: Volumes -->
-                        <div class="phase-row d-flex align-items-center" id="phaseVolumes">
-                            <div class="phase-icon me-3" id="phaseVolumesIcon">
-                                <i class="fas fa-cube"></i>
-                            </div>
-                            <div class="flex-grow-1">
-                                <div class="fw-semibold" style="font-size: 0.95rem;">Calculate Volumes</div>
-                                <small class="text-muted" id="phaseVolumesStatus">Waiting...</small>
-                            </div>
-                            <div class="phase-counter text-end" id="phaseVolumesCounter" style="min-width: 60px; font-size: 0.85rem;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    {% include 'projects/includes/_progress_modal.html' with title='Processing Parts' title_icon='fa-magic' first_phase_label='Prepare Files' first_phase_status='Complete' %}
 
     <!-- Part Details Modal -->
     <div class="modal fade" id="partDetailsModal" tabindex="-1" aria-labelledby="partDetailsModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-lg">
-            <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+            <div class="modal-content mf-modal">
                 <div class="modal-header border-bottom border-dark">
                     <h5 class="modal-title fw-bold" id="partDetailsModalLabel">Part Details</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1048,14 +876,14 @@
                                 <!-- Floating Action Toolbar (Top Right) -->
                                 <div class="position-absolute top-0 end-0 p-2 z-index-1" style="z-index: 10;">
                                     <div class="btn-group shadow-sm" role="group">
-                                        <button type="button" class="btn btn-sm btn-dark bg-dark bg-opacity-75 border-secondary " id="downloadSTL" title="Download 3D File">
+                                        <button type="button" class="btn btn-sm btn-glass" id="downloadSTL" title="Download 3D File">
                                             <i class="fas fa-download"></i>
                                         </button>
-                                        <button type="button" class="btn btn-sm btn-dark bg-dark bg-opacity-75 border-secondary " id="copyMirrorPart" title="Copy & Mirror">
+                                        <button type="button" class="btn btn-sm btn-glass" id="copyMirrorPart" title="Copy & Mirror">
                                             <i class="fas fa-copy"></i> <span class="spinner-border spinner-border-sm ms-1 d-none" role="status" aria-hidden="true"></span>
                                         </button>
                                         <div class="btn-group" role="group">
-                                            <button id="sendToSlicerBtn" type="button" class="btn btn-sm btn-dark bg-dark bg-opacity-75 border-secondary  dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Send to Slicer">
+                                            <button id="sendToSlicerBtn" type="button" class="btn btn-sm btn-glass dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Send to Slicer">
                                                 <i class="fas fa-paper-plane"></i>
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end shadow-sm border-secondary bg-dark" aria-labelledby="sendToSlicerBtn" style="font-size: 0.875rem;">
@@ -1079,7 +907,7 @@
                                         </div>
                                         {% if forge_modules %}
                                         <div class="btn-group" role="group">
-                                            <button id="forgeActionsBtn" type="button" class="btn btn-sm btn-dark bg-dark bg-opacity-75 border-secondary  dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Forge Actions">
+                                            <button id="forgeActionsBtn" type="button" class="btn btn-sm btn-glass dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" title="Forge Actions">
                                                 <i class="fas fa-hammer"></i>
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end shadow-sm border-secondary bg-dark" aria-labelledby="forgeActionsBtn" style="font-size: 0.875rem;">
@@ -1122,7 +950,7 @@
                                 <!-- Floating View Controls (Bottom Right) -->
                                 <div class="position-absolute bottom-0 end-0 p-2 d-flex gap-2" style="z-index: 10;">
                                     <div class="dropdown dropup">
-                                        <button class="btn btn-sm btn-dark bg-dark bg-opacity-75 border-secondary  shadow-sm dropdown-toggle" type="button" id="viewPresetBtn" data-bs-toggle="dropdown" aria-expanded="false" title="View Angles" disabled>
+                                        <button class="btn btn-sm btn-glass shadow-sm dropdown-toggle" type="button" id="viewPresetBtn" data-bs-toggle="dropdown" aria-expanded="false" title="View Angles" disabled>
                                             <i class="fas fa-cube"></i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow border-secondary bg-dark" aria-labelledby="viewPresetBtn" style="font-size: 0.875rem;">
@@ -1139,7 +967,7 @@
                                         </ul>
                                     </div>
                                     <div class="dropdown dropup">
-                                        <button class="btn btn-sm btn-dark bg-dark bg-opacity-75 border-secondary  shadow-sm dropdown-toggle" type="button" id="zoomPresetBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Zoom" disabled>
+                                        <button class="btn btn-sm btn-glass shadow-sm dropdown-toggle" type="button" id="zoomPresetBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Zoom" disabled>
                                             <i class="fas fa-search-plus"></i>
                                         </button>
                                         <ul class="dropdown-menu dropdown-menu-end shadow border-secondary bg-dark" aria-labelledby="zoomPresetBtn" style="font-size: 0.875rem;">
@@ -1282,7 +1110,7 @@
                             <i class="fas fa-trash"></i> Remove Part
                         </button>
                     </div>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary" id="savePartChanges">Save Changes</button>
                 </div>
             </div>
@@ -1292,7 +1120,7 @@
     <!-- Part Modal -->
     <div class="modal fade" id="partModal" tabindex="-1" aria-labelledby="partModalLabel" aria-hidden="true">
         <div class="modal-dialog">
-            <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+            <div class="modal-content mf-modal">
                 <div class="modal-header border-bottom border-dark">
                     <h5 class="modal-title fw-bold" id="partModalLabel">Add Part</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1374,7 +1202,7 @@
                     </form>
                 </div>
                 <div class="modal-footer border-top border-dark">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-glass btn-sm" data-bs-dismiss="modal">Close</button>
                     <button type="button" class="btn btn-primary btn-sm" id="savePart">Save Part</button>
                 </div>
             </div>
@@ -1384,7 +1212,7 @@
     <!-- Bulk Edit Modal -->
     <div class="modal fade" id="bulkEditModal" tabindex="-1" aria-labelledby="bulkEditModalLabel" aria-hidden="true">
         <div class="modal-dialog">
-            <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+            <div class="modal-content mf-modal">
                 <div class="modal-header border-bottom border-dark">
                     <h5 class="modal-title fw-bold" id="bulkEditModalLabel">Bulk Edit Parts</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1425,7 +1253,7 @@
                     </form>
                 </div>
                 <div class="modal-footer border-top border-dark">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" id="saveBulkEdit">Save Changes</button>
                 </div>
             </div>
@@ -1435,7 +1263,7 @@
     <!-- Export .3MF Modal -->
     <div class="modal fade" id="export3mfModal" tabindex="-1" aria-labelledby="export3mfModalLabel" aria-hidden="true">
         <div class="modal-dialog">
-            <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+            <div class="modal-content mf-modal">
                 <div class="modal-header border-bottom border-dark">
                     <h5 class="modal-title fw-bold" id="export3mfModalLabel"><i class="fas fa-cube me-2 text-info"></i>Export to .3MF</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -1449,7 +1277,7 @@
                     </div>
                 </div>
                 <div class="modal-footer border-top border-dark">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" id="confirmExport3mf"><i class="fas fa-download me-1"></i>Export .3MF</button>
                 </div>
             </div>
@@ -1460,28 +1288,28 @@
     <div class="bulk-action-bar" id="bulkActionBar">
         <span class=" fw-bold"><span id="bulkSelectedCount">0</span> Selected</span>
         <div class="vr bg-secondary opacity-50 mx-1"></div>
-        <button class="btn btn-sm btn-outline-primary" id="btnBulkEditModal">
+        <button class="btn btn-sm btn-primary" id="btnBulkEditModal">
             <i class="fas fa-edit"></i> Edit
         </button>
-        <button class="btn btn-sm btn-outline-info" id="btnBulkExport3mf">
+        <button class="btn btn-sm btn-glass" id="btnBulkExport3mf">
             <i class="fas fa-cube"></i> Export .3MF
         </button>
-        <button class="btn btn-sm btn-outline-success" id="btnBulkComplete">
+        <button class="btn btn-sm btn-glass" id="btnBulkComplete">
             <i class="fas fa-check-double"></i> Mark Complete
         </button>
         <button class="btn btn-sm btn-outline-danger" id="btnBulkDelete">
             <i class="fas fa-trash"></i> Delete
         </button>
-        <button class="btn btn-sm btn-secondary ms-2" id="btnCancelBulkMode">
+        <button class="btn btn-sm btn-glass ms-2" id="btnCancelBulkMode">
             Cancel
         </button>
     </div>
 
     <!-- Instructions Gallery Card -->
     <div class="card premium-card mb-4 animate-enter" style="animation-delay: 400ms;">
-        <div class="card-header border-bottom border-dark d-flex justify-content-between align-items-center" style="background-color: transparent;">
+        <div class="card-header border-bottom border-dark d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold"><i class="fas fa-book-open me-2 text-info"></i>Assembly Instructions</h5>
-            <a href="{% url 'projects:upload_instructions' project.pk %}" class="btn btn-sm btn-primary" style="border-radius: 8px;">
+            <a href="{% url 'projects:upload_instructions' project.pk %}" class="btn btn-sm btn-primary">
                 <i class="fas {% if instructions %}fa-edit{% else %}fa-plus{% endif %}"></i> {% if instructions %}Edit{% else %}Add Instructions{% endif %}
             </a>
         </div>
@@ -1505,14 +1333,14 @@
                                 <div class="file-icon-container mb-3">
                                     <i class="fas fa-file-pdf fa-5x text-danger"></i>
                                 </div>
-                                <a href="{{ instruction.file.url }}" target="_blank" class="btn btn-primary" style="border-radius: 8px;">
+                                <a href="{{ instruction.file.url }}" target="_blank" class="btn btn-glass">
                                     <i class="fas fa-download"></i> View/Download PDF
                                 </a>
                                 <iframe src="{{ instruction.file.url }}"
                                     style="width: 100%; height: 60vh; border: 1px solid var(--border-dark); margin-top: 1rem; display: none; border-radius: 12px;"
                                     id="pdf-viewer-{{ instruction.id }}"></iframe>
-                                <button class="btn btn-sm btn-outline-secondary mt-2"
-                                    onclick="togglePdfViewer({{ instruction.id }})" style="border-radius: 6px;">
+                                <button class="btn btn-sm btn-glass mt-2"
+                                    onclick="togglePdfViewer({{ instruction.id }})">
                                     <i class="fas fa-eye"></i> Toggle PDF Viewer
                                 </button>
                             </div>
@@ -1521,7 +1349,7 @@
                                 <div class="file-icon-container mb-3">
                                     <i class="fas fa-file-word fa-5x text-primary"></i>
                                 </div>
-                                <a href="{{ instruction.file.url }}" target="_blank" class="btn btn-primary" style="border-radius: 8px;">
+                                <a href="{{ instruction.file.url }}" target="_blank" class="btn btn-glass">
                                     <i class="fas fa-download"></i> Download DOCX
                                 </a>
                             </div>
@@ -1530,7 +1358,7 @@
                                 <div class="file-icon-container mb-3">
                                     <i class="fas fa-file fa-5x text-secondary"></i>
                                 </div>
-                                <a href="{{ instruction.file.url }}" target="_blank" class="btn btn-primary" style="border-radius: 8px;">
+                                <a href="{{ instruction.file.url }}" target="_blank" class="btn btn-glass">
                                     <i class="fas fa-download"></i> Download File
                                 </a>
                             </div>
@@ -1545,15 +1373,13 @@
                 </div>
             </div>
             {% else %}
-            <div class="text-center py-4">
-                <span class="text-muted"><i class="fas fa-info-circle me-1"></i>No instructions available yet.</span>
-            </div>
+            {% include 'projects/includes/_empty_state.html' with icon='fa-book-open' title='No instructions yet' text='Upload build steps as images, videos or PDFs.' %}
             {% endif %}
         </div>
     </div>
 
     <div class="card premium-card mb-4 animate-enter" style="animation-delay: 500ms; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(30, 30, 35, 0.5) 100%);">
-        <div class="card-header border-bottom border-dark py-3" style="background-color: transparent;">
+        <div class="card-header border-bottom border-dark py-3">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
                     <h5 class="mb-1 fw-bold text-white"><i class="fas fa-layer-group me-2 text-warning"></i>Required Materials</h5>
@@ -1578,8 +1404,8 @@
         <div class="card-body p-0">
             {% if material_info %}
             <div class="table-responsive" style="overflow-y: hidden;">
-                <table class="table table-hover border-top-0 mb-0">
-                    <thead style="background-color: rgba(0,0,0,0.2);">
+                <table class="table table-hover mf-table border-top-0 mb-0">
+                    <thead>
                         <tr>
                             <th class="border-top-0">Material</th>
                             <th class="border-top-0 text-center">Color</th>
@@ -1590,12 +1416,12 @@
                     </thead>
                     <tbody>
                         {% for material in material_info %}
-                        <tr style="transition: all 0.2s ease;">
+                        <tr>
                             <td class="align-middle fw-medium">{{ material.name }}</td>
                             <td class="align-middle text-center">
                                 {% if material.color %}
-                                <span class="badge shadow-sm"
-                                    style="background-color: {{ material.color }}; width: 20px; height: 20px; padding: 0; border-radius: 50%; display: inline-block; border: 1px solid var(--border-dark);"
+                                <span class="color-dot color-dot-lg shadow-sm"
+                                    style="background-color: {{ material.color }};"
                                     title="{{ material.name }}"></span>
                                 {% else %}
                                 <span class="text-muted">-</span>
@@ -1610,8 +1436,8 @@
                 </table>
             </div>
             {% else %}
-            <div class="text-center py-4">
-                <span class="text-muted"><i class="fas fa-info-circle me-1"></i>No materials required for this project.</span>
+            <div class="p-4">
+                {% include 'projects/includes/_empty_state.html' with icon='fa-palette' title='No materials assigned' text='Assign materials to parts to see totals here.' %}
             </div>
             {% endif %}
         </div>
@@ -1838,7 +1664,7 @@ document.addEventListener('DOMContentLoaded', function() {
             $('#viewerError').html(`
                 <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
                 <p class="mt-2">Failed to initialize 3D viewer</p>
-                <p class="small text-muted">${error.message}</p>
+                <p class="small text-muted">${MF.esc(error.message)}</p>
             `).show();
         }
     }
@@ -1951,7 +1777,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 $('#viewerError').html(`
                     <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
                     <p class="mt-2">Failed to process 3D model</p>
-                    <p class="small text-muted">${error.message}</p>
+                    <p class="small text-muted">${MF.esc(error.message)}</p>
                 `).show();
             }
         };
@@ -1967,7 +1793,7 @@ document.addEventListener('DOMContentLoaded', function() {
             $('#viewerError').html(`
                 <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
                 <p class="mt-2">Failed to load 3D model</p>
-                <p class="small text-muted">${error.message || 'Unknown error'}</p>
+                <p class="small text-muted">${MF.esc(error.message || 'Unknown error')}</p>
             `).show();
         };
 
@@ -2016,7 +1842,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Print estimate: render slicer/heuristic result with per-feature breakdown
     const ESTIMATE_LABELS = { shell: 'Shells', infill: 'Infill', support: 'Supports', other: 'Other' };
-    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     function formatEstimateTime(s) {
         if (!s) return null;
         const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
@@ -2044,7 +1869,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const badge = est.source === 'slicer'
             ? '<span class="badge bg-primary rounded-pill">Slicer</span>'
             : '<span class="badge bg-secondary rounded-pill">Estimate</span>';
-        let html = `<div class="d-flex align-items-center gap-2">${badge}<span class="text-muted">${esc(est.machine_name || '')}</span></div>`;
+        let html = `<div class="d-flex align-items-center gap-2">${badge}<span class="text-muted">${MF.esc(est.machine_name || '')}</span></div>`;
         const bits = [];
         if (est.grams) bits.push(`${est.grams}g`);
         if (est.time_s) bits.push(formatEstimateTime(est.time_s));
@@ -2054,17 +1879,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (bd && Object.keys(bd).length) {
             html += '<div class="mt-1">';
             for (const [k, v] of Object.entries(bd)) {
-                html += `<div class="d-flex justify-content-between"><span class="text-muted">${ESTIMATE_LABELS[k] || esc(k)}</span><span>${v}g</span></div>`;
+                html += `<div class="d-flex justify-content-between"><span class="text-muted">${ESTIMATE_LABELS[k] || MF.esc(k)}</span><span>${v}g</span></div>`;
             }
             html += '</div>';
         }
         if (est.warning) {
-            html += `<div class="text-warning mt-1"><i class="fas fa-exclamation-triangle me-1"></i>${esc(est.warning)}</div>`;
+            html += `<div class="text-warning mt-1"><i class="fas fa-exclamation-triangle me-1"></i>${MF.esc(est.warning)}</div>`;
         }
         $box.html(html).show();
     }
     function showEstimateError(msg) {
-        $('#estimateResult').html(`<div class="text-danger">${esc(msg)}</div>`).show();
+        $('#estimateResult').html(`<div class="text-danger">${MF.esc(msg)}</div>`).show();
     }
     function refreshPartEstimate(partId) {
         $.get(`/part/${partId}/details/`).done(function (data) {
@@ -2182,7 +2007,7 @@ document.addEventListener('DOMContentLoaded', function() {
             $('#viewerError').html(`
                 <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
                 <p class="mt-2">Failed to load part details</p>
-                <p class="small text-muted">${error}</p>
+                <p class="small text-muted">${MF.esc(error)}</p>
             `).show();
         });
     });
@@ -2249,7 +2074,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Validate quantity
         if (formData.get('quantity') < 1) {
-            alert('Quantity must be at least 1');
+            MF.toast('Quantity must be at least 1', 'error');
             return;
         }
 
@@ -2261,13 +2086,13 @@ document.addEventListener('DOMContentLoaded', function() {
             contentType: false,
             success: function (response) {
                 if (response.status === 'success') {
-                    location.reload();
+                    MF.reloadWithToast(response.message || 'Part updated');
                 } else {
-                    alert('Error: ' + (response.message || 'Failed to update part'));
+                    MF.toast('Error: ' + (response.message || 'Failed to update part'), 'error');
                 }
             },
             error: function (xhr) {
-                alert('Error updating part. Please try again.');
+                MF.toast('Error updating part. Please try again.', 'error');
             }
         });
     });
@@ -2314,7 +2139,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const fileUrl = window.location.origin + stlUrl;
             window.location.href = `bambustudio://open?file=${encodeURIComponent(fileUrl)}`;
         } else {
-            alert('No 3D file is available for this part.');
+            MF.toast('No 3D file is available for this part.', 'warning');
         }
     });
 
@@ -2325,7 +2150,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const fileUrl = window.location.origin + stlUrl;
             window.location.href = `orcaslicer://open?file=${encodeURIComponent(fileUrl)}`;
         } else {
-            alert('No 3D file is available for this part.');
+            MF.toast('No 3D file is available for this part.', 'warning');
         }
     });
 
@@ -2336,7 +2161,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const fileUrl = window.location.origin + stlUrl;
             window.location.href = `prusaslicer://open?file=${encodeURIComponent(fileUrl)}`;
         } else {
-            alert('No 3D file is available for this part.');
+            MF.toast('No 3D file is available for this part.', 'warning');
         }
     });
 
@@ -2375,9 +2200,9 @@ document.addEventListener('DOMContentLoaded', function() {
             success: function (response) {
                 if (response.status === 'success') {
                     $('#partDetailsModal').modal('hide');
-                    location.reload();
+                    MF.reloadWithToast(response.message || 'Mirrored copy created');
                 } else {
-                    alert('Error: ' + (response.message || 'Failed to copy and mirror part'));
+                    MF.toast('Error: ' + (response.message || 'Failed to copy and mirror part'), 'error');
                     // Re-enable button and hide spinner
                     $button.prop('disabled', false);
                     $spinner.addClass('d-none');
@@ -2394,7 +2219,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 } catch (e) {
                     // If we can't parse the response, use the default message
                 }
-                alert(errorMessage);
+                MF.toast(errorMessage, 'error');
                 // Re-enable button and hide spinner
                 $button.prop('disabled', false);
                 $spinner.addClass('d-none');
@@ -2406,7 +2231,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle part removal
     $('#removePart').click(function () {
         const partId = $('#partDetailsModal').data('part-id');
-        if (confirm('Are you sure you want to remove this part? This action cannot be undone.')) {
+        MF.confirm({title: 'Delete part?', message: 'Are you sure you want to remove this part? This action cannot be undone.', confirmLabel: 'Delete', danger: true}).then(ok => {
+            if (!ok) return;
             $.ajax({
                 url: `/part/${partId}/delete/`,
                 method: 'POST',
@@ -2416,16 +2242,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 success: function (response) {
                     if (response.status === 'success') {
                         $('#partDetailsModal').modal('hide');
-                        location.reload();
+                        MF.reloadWithToast(response.message || 'Part deleted');
                     } else {
-                        alert('Error: ' + (response.message || 'Failed to remove part'));
+                        MF.toast('Error: ' + (response.message || 'Failed to remove part'), 'error');
                     }
                 },
                 error: function (xhr) {
-                    alert('Error removing part. Please try again.');
+                    MF.toast('Error removing part. Please try again.', 'error');
                 }
             });
-        }
+        });
     });
 
     // Initialize Splide gallery (Hero Bento)
@@ -2441,6 +2267,9 @@ document.addEventListener('DOMContentLoaded', function() {
             autoplay: true,
             interval: 5000,
         }).mount();
+        // GLightbox gathers [data-gallery] matches at open time; loop clones would
+        // duplicate entries and scramble arrow-key order.
+        $('#project-gallery .splide__slide--clone .glightbox').removeAttr('data-gallery');
     }
 
     // Handle progress updates
@@ -2488,11 +2317,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     $('.printed-parts-count').text(response.total_completed);
                 } else {
                     // Revert UI on failure (simple reload for now or just alert)
-                    alert('Error: ' + (response.message || 'Failed to update progress'));
+                    MF.toast('Error: ' + (response.message || 'Failed to update progress'), 'error');
                 }
             },
             error: function (xhr) {
-                alert('Error updating progress. Please try again.');
+                MF.toast('Error updating progress. Please try again.', 'error');
             }
         });
     }
@@ -2536,15 +2365,13 @@ document.addEventListener('DOMContentLoaded', function() {
             success: function (response) {
                 if (response.status === 'success') {
                     // Optionally show a success message
-                    const toast = new bootstrap.Toast($('<div class="toast" role="alert" aria-live="assertive" aria-atomic="true"><div class="toast-body">Status updated successfully</div></div>').appendTo('body'));
-                    toast.show();
-                    setTimeout(() => toast.dispose(), 3000);
+                    MF.toast('Status updated');
                 } else {
-                    alert('Error: ' + (response.message || 'Failed to update status'));
+                    MF.toast('Error: ' + (response.message || 'Failed to update status'), 'error');
                 }
             },
             error: function (xhr) {
-                alert('Error updating status. Please try again.');
+                MF.toast('Error updating status. Please try again.', 'error');
             }
         });
     });
@@ -2593,12 +2420,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }).mount();
     }
 
-    // Initialize GLightbox for instructions
+    // Initialize GLightbox. Loop-mode Splide clones slides; keep clones out of the
+    // lightbox so each gallery holds every image exactly once.
     const lightbox = GLightbox({
-        selector: '.glightbox',
+        selector: '.splide__slide:not(.splide__slide--clone) .glightbox',
         touchNavigation: true,
         loop: true,
         zoomable: true
+    });
+
+    // A clone can be on screen mid-loop; open its original instead.
+    $('#project-gallery').on('click', '.splide__slide--clone .glightbox', function (e) {
+        e.preventDefault();
+        $('#project-gallery .splide__slide:not(.splide__slide--clone) .glightbox')
+            .filter((_, a) => a.getAttribute('href') === this.getAttribute('href'))
+            .get(0)?.click();
     });
 
     // Toggle PDF viewer function
@@ -2630,7 +2466,7 @@ document.addEventListener('DOMContentLoaded', function() {
             $('#purchasedPartDetailsModal').modal('show');
         }).fail(function (xhr, status, error) {
             console.error('Error loading purchased part details:', error);
-            alert('Error loading purchased part details. Please try again.');
+            MF.toast('Error loading purchased part details. Please try again.', 'error');
         });
     });
 
@@ -2648,11 +2484,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Validate inputs
         if (data.quantity < 1) {
-            alert('Quantity must be at least 1');
+            MF.toast('Quantity must be at least 1', 'error');
             return;
         }
         if (data.price < 0) {
-            alert('Price cannot be negative');
+            MF.toast('Price cannot be negative', 'error');
             return;
         }
 
@@ -2662,13 +2498,13 @@ document.addEventListener('DOMContentLoaded', function() {
             data: data,
             success: function (response) {
                 if (response.status === 'success') {
-                    location.reload();
+                    MF.reloadWithToast(response.message || 'Purchased part updated');
                 } else {
-                    alert('Error: ' + (response.message || 'Failed to update purchased part'));
+                    MF.toast('Error: ' + (response.message || 'Failed to update purchased part'), 'error');
                 }
             },
             error: function (xhr) {
-                alert('Error updating purchased part. Please try again.');
+                MF.toast('Error updating purchased part. Please try again.', 'error');
             }
         });
     });
@@ -2676,7 +2512,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Handle purchased part removal
     $('#removePurchasedPart').click(function () {
         const partId = $('#purchasedPartDetailsModal').data('part-id');
-        if (confirm('Are you sure you want to remove this purchased part? This action cannot be undone.')) {
+        MF.confirm({title: 'Delete purchased part?', message: 'Are you sure you want to remove this purchased part? This action cannot be undone.', confirmLabel: 'Delete', danger: true}).then(ok => {
+            if (!ok) return;
             $.ajax({
                 url: `/purchased-part/${partId}/delete/`,
                 method: 'POST',
@@ -2686,16 +2523,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 success: function (response) {
                     if (response.status === 'success') {
                         $('#purchasedPartDetailsModal').modal('hide');
-                        location.reload();
+                        MF.reloadWithToast(response.message || 'Purchased part deleted');
                     } else {
-                        alert('Error: ' + (response.message || 'Failed to remove purchased part'));
+                        MF.toast('Error: ' + (response.message || 'Failed to remove purchased part'), 'error');
                     }
                 },
                 error: function (xhr) {
-                    alert('Error removing purchased part. Please try again.');
+                    MF.toast('Error removing purchased part. Please try again.', 'error');
                 }
             });
-        }
+        });
     });
 
     // Handle file uploads
@@ -2720,7 +2557,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Validate quantity
         if (formData.get('quantity') < 1) {
-            alert('Quantity must be at least 1');
+            MF.toast('Quantity must be at least 1', 'error');
             return;
         }
 
@@ -2732,13 +2569,13 @@ document.addEventListener('DOMContentLoaded', function() {
             contentType: false,
             success: function (response) {
                 if (response.status === 'success') {
-                    location.reload();
+                    MF.reloadWithToast(response.message || 'Part added');
                 } else {
-                    alert('Error: ' + (response.message || 'Failed to add part'));
+                    MF.toast('Error: ' + (response.message || 'Failed to add part'), 'error');
                 }
             },
             error: function (xhr) {
-                alert('Error adding part. Please try again.');
+                MF.toast('Error adding part. Please try again.', 'error');
             }
         });
     });
@@ -2862,13 +2699,13 @@ document.addEventListener('DOMContentLoaded', function() {
             headers: { 'X-CSRFToken': '{{ csrf_token }}' },
             success: function(response) {
                 if (response.status === 'success') {
-                    location.reload();
+                    MF.reloadWithToast(response.message || 'Parts updated');
                 } else {
-                    alert('Error: ' + response.message);
+                    MF.toast('Error: ' + response.message, 'error');
                 }
             },
             error: function(xhr) {
-                alert('Error updating parts. Please try again.');
+                MF.toast('Error updating parts. Please try again.', 'error');
             }
         });
     });
@@ -2877,7 +2714,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const partIds = getSelectedPartIds();
         if (partIds.length === 0) return;
 
-        if (confirm(`Are you sure you want to mark ${partIds.length} parts as complete?`)) {
+        MF.confirm({title: 'Mark parts complete?', message: `Are you sure you want to mark ${partIds.length} parts as complete?`, confirmLabel: 'Mark complete'}).then(ok => {
+            if (!ok) return;
             $.ajax({
                 url: `/project/${projectId}/bulk-complete-parts/`,
                 method: 'POST',
@@ -2886,16 +2724,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: { 'X-CSRFToken': '{{ csrf_token }}' },
                 success: function(response) {
                     if (response.status === 'success') {
-                        location.reload();
+                        MF.reloadWithToast(response.message || 'Parts marked complete');
                     } else {
-                        alert('Error: ' + response.message);
+                        MF.toast('Error: ' + response.message, 'error');
                     }
                 },
                 error: function(xhr) {
-                    alert('Error updating parts.');
+                    MF.toast('Error updating parts.', 'error');
                 }
             });
-        }
+        });
     });
 
     // Export selected parts as a single .3mf file
@@ -2915,7 +2753,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         if (totalCopies === 0) {
-            alert('The selected parts have no unprinted copies.');
+            MF.toast('The selected parts have no unprinted copies.', 'error');
             return;
         }
 
@@ -2973,19 +2811,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 } catch (e) {
                     console.error('3MF export download failed:', e);
                     $btn.prop('disabled', false);
-                    alert('Export completed but the download could not start: ' + e.message);
+                    MF.toast('Export completed but the download could not start: ' + e.message, 'error');
                 }
             },
             error: function(xhr) {
                 $btn.prop('disabled', false);
                 const fallback = function() {
-                    alert('Export failed (HTTP ' + (xhr.status || 'no response') + '). Check the server console for details and try again — with a smaller selection if exporting many parts.');
+                    MF.toast('Export failed (HTTP ' + (xhr.status || 'no response') + '). Check the server console for details and try again — with a smaller selection if exporting many parts.', 'error');
                 };
                 if (xhr.response instanceof Blob) {
                     const reader = new FileReader();
                     reader.onload = function() {
                         try {
-                            alert('Export failed: ' + JSON.parse(reader.result).message);
+                            MF.toast('Export failed: ' + JSON.parse(reader.result).message, 'error');
                         } catch (e) {
                             fallback();
                         }
@@ -2999,7 +2837,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     try {
                         message = JSON.parse(xhr.responseText).message;
                     } catch (e) {}
-                    if (message) alert('Export failed: ' + message);
+                    if (message) MF.toast('Export failed: ' + message, 'error');
                     else fallback();
                 }
             }
@@ -3010,7 +2848,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const partIds = getSelectedPartIds();
         if (partIds.length === 0) return;
 
-        if (confirm(`Are you sure you want to delete ${partIds.length} parts? This action cannot be undone.`)) {
+        MF.confirm({title: 'Delete selected parts?', message: `Are you sure you want to delete ${partIds.length} parts? This action cannot be undone.`, confirmLabel: 'Delete', danger: true}).then(ok => {
+            if (!ok) return;
             $.ajax({
                 url: `/project/${projectId}/bulk-delete-parts/`,
                 method: 'POST',
@@ -3019,16 +2858,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: { 'X-CSRFToken': '{{ csrf_token }}' },
                 success: function(response) {
                     if (response.status === 'success') {
-                        location.reload();
+                        MF.reloadWithToast(response.message || 'Parts deleted');
                     } else {
-                        alert('Error: ' + response.message);
+                        MF.toast('Error: ' + response.message, 'error');
                     }
                 },
                 error: function(xhr) {
-                    alert('Error deleting parts.');
+                    MF.toast('Error deleting parts.', 'error');
                 }
             });
-        }
+        });
     });
 
     // Reprocess STL actions (Generate Thumbnails / Calculate Volumes)
@@ -3076,69 +2915,38 @@ document.addEventListener('DOMContentLoaded', function() {
                             // Update overall progress bar
                             $('#uploadProgressBar').css('width', percent + '%').attr('aria-valuenow', percent);
                             
-                            // Helper to set phase active / complete
-                            function setPhase(phaseName, status) {
-                                ['Upload', 'Thumbnails', 'Volumes'].forEach(p => {
-                                    $(`#phase${p}`).removeClass('active completed skipped');
-                                });
-                                
-                                const phaseOrder = ['Upload', 'Thumbnails', 'Volumes'];
-                                const idx = phaseOrder.indexOf(phaseName);
-                                
-                                for (let i = 0; i < idx; i++) {
-                                    $(`#phase${phaseOrder[i]}`).addClass('completed');
-                                    $(`#phase${phaseOrder[i]}Icon`).html('<i class="fas fa-check"></i>');
-                                }
-                                
-                                if (phaseName !== 'complete') {
-                                    $(`#phase${phaseName}`).addClass('active');
-                                    $(`#phase${phaseName}Status`).text(status);
-                                } else {
-                                    phaseOrder.forEach(p => {
-                                        $(`#phase${p}`).removeClass('active').addClass('completed');
-                                        $(`#phase${p}Icon`).html('<i class="fas fa-check"></i>');
-                                    });
-                                }
-                            }
-                            
-                            function markSkipped(phaseName, reason) {
-                                $(`#phase${phaseName}`).removeClass('active').addClass('skipped');
-                                $(`#phase${phaseName}Icon`).html('<i class="fas fa-forward"></i>');
-                                $(`#phase${phaseName}Status`).text(reason || 'Skipped');
-                            }
-                            
                             // Handle skipped phases
                             skippedPhases.forEach(function(s) {
                                 if (s.phase === 'thumbnails') {
-                                    markSkipped('Thumbnails', s.reason || 'Skipped');
+                                    MF.markSkipped('Thumbnails', s.reason || 'Skipped');
                                 }
                                 if (s.phase === 'volumes') {
-                                    markSkipped('Volumes', s.reason || 'Skipped');
+                                    MF.markSkipped('Volumes', s.reason || 'Skipped');
                                 }
                             });
                             
                             // Update stepper
                             if (phase === 'upload') {
-                                setPhase('Upload', data.status || 'Extracting parts from 3MF...');
+                                MF.setPhase('Upload', data.status || 'Extracting parts from 3MF...');
                             } else if (phase === 'thumbnails') {
                                 const isSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
                                 if (!isSkipped) {
-                                    setPhase('Thumbnails', data.status || 'Rendering...');
+                                    MF.setPhase('Thumbnails', data.status || 'Rendering...');
                                     $('#phaseThumbnailsCounter').text(`${completed} / ${total}`);
                                 }
                             } else if (phase === 'volumes') {
                                 const thumbSkipped = skippedPhases.some(s => s.phase === 'thumbnails');
                                 if (thumbSkipped) {
-                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                                    MF.markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
                                 } else {
                                     $(`#phaseThumbnails`).removeClass('active').addClass('completed');
                                     $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
                                     $(`#phaseThumbnailsStatus`).text('Complete');
                                     $(`#phaseThumbnailsCounter`).text(`${total} / ${total}`);
                                 }
-                                setPhase('Volumes', data.status || 'Calculating...');
+                                MF.setPhase('Volumes', data.status || 'Calculating...');
                                 if (thumbSkipped) {
-                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                                    MF.markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
                                 } else {
                                     $(`#phaseThumbnails`).removeClass('active').addClass('completed');
                                     $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
@@ -3155,7 +2963,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 $(`#phaseUploadIcon`).html('<i class="fas fa-check"></i>');
                                 
                                 if (thumbSkipped) {
-                                    markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
+                                    MF.markSkipped('Thumbnails', skippedPhases.find(s => s.phase === 'thumbnails').reason);
                                 } else {
                                     $(`#phaseThumbnails`).removeClass('active skipped').addClass('completed');
                                     $(`#phaseThumbnailsIcon`).html('<i class="fas fa-check"></i>');
@@ -3164,7 +2972,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
                                 
                                 if (volSkipped) {
-                                    markSkipped('Volumes', skippedPhases.find(s => s.phase === 'volumes').reason);
+                                    MF.markSkipped('Volumes', skippedPhases.find(s => s.phase === 'volumes').reason);
                                 } else {
                                     $(`#phaseVolumes`).removeClass('active skipped').addClass('completed');
                                     $(`#phaseVolumesIcon`).html('<i class="fas fa-check"></i>');
@@ -3173,18 +2981,18 @@ document.addEventListener('DOMContentLoaded', function() {
                                 }
                                 
                                 setTimeout(function() {
-                                    location.reload();
+                                    MF.reloadWithToast('Reprocessing complete');
                                 }, 1000);
                             }
                         });
                     }, 500);
                 } else {
-                    alert(response.message || 'Operation failed to start');
+                    MF.toast(response.message || 'Operation failed to start', 'error');
                 }
             },
             error: function(xhr) {
                 const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Error starting process';
-                alert(errorMsg);
+                MF.toast(errorMsg, 'error');
             }
         });
     }
@@ -3201,37 +3009,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
     $('#projectApplySmartParsing').click(function(e) {
         e.preventDefault();
-        if (!confirm('Apply smart parsing to all parts in this project?\n\nQuantities will be read from part/file names (only for parts whose quantity is 1), and missing Left/Right counterparts will be created.')) {
-            return;
-        }
+        MF.confirm({title: 'Apply smart parsing?', message: 'Apply smart parsing to all parts in this project?\n\nQuantities will be read from part/file names (only for parts whose quantity is 1), and missing Left/Right counterparts will be created.', confirmLabel: 'Apply'}).then(ok => {
+            if (!ok) return;
 
-        $.ajax({
-            url: `/project/${projectId}/apply-smart-parsing/`,
-            method: 'POST',
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
-            success: function(response) {
-                if (response.status === 'success') {
-                    let details = response.message;
-                    const extras = [];
-                    if (response.quantities_updated && response.quantities_updated.length) {
-                        extras.push('Quantities: ' + response.quantities_updated.join(', '));
+            $.ajax({
+                url: `/project/${projectId}/apply-smart-parsing/`,
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+                success: function(response) {
+                    if (response.status === 'success') {
+                        let details = response.message;
+                        const extras = [];
+                        if (response.quantities_updated && response.quantities_updated.length) {
+                            extras.push('Quantities: ' + response.quantities_updated.join(', '));
+                        }
+                        if (response.mirrors_created && response.mirrors_created.length) {
+                            extras.push('Mirror parts: ' + response.mirrors_created.join(', '));
+                        }
+                        if (extras.length) {
+                            details += '\n\n' + extras.join('\n');
+                        }
+                        MF.reloadWithToast(details, 'success');
+                    } else {
+                        MF.toast(response.message || 'Smart parsing failed', 'error');
                     }
-                    if (response.mirrors_created && response.mirrors_created.length) {
-                        extras.push('Mirror parts: ' + response.mirrors_created.join(', '));
-                    }
-                    if (extras.length) {
-                        details += '\n\n' + extras.join('\n');
-                    }
-                    alert(details);
-                    location.reload();
-                } else {
-                    alert(response.message || 'Smart parsing failed');
+                },
+                error: function(xhr) {
+                    const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Error applying smart parsing';
+                    MF.toast(errorMsg, 'error');
                 }
-            },
-            error: function(xhr) {
-                const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Error applying smart parsing';
-                alert(errorMsg);
-            }
+            });
         });
     });
 
