@@ -1,0 +1,41 @@
+{% load humanize %}{% comment %}Project table row (library list view). Context: project, collection_id (optional — renders remove button in collection context){% endcomment %}
+<tr class="project-card position-relative"{% if collection_id %} data-collection-id="{{ collection_id }}" data-project-id="{{ project.id }}"{% endif %}>
+    <td class="library-row-select">
+        {% if not collection_id %}
+        <input type="checkbox" class="project-select form-check-input" data-project-id="{{ project.id }}" aria-label="Select {{ project.name }}">
+        {% else %}
+        <button type="button" class="btn btn-sm btn-glass project-remove-row" data-collection-id="{{ collection_id }}" data-project-id="{{ project.id }}" title="Remove from collection" aria-label="Remove {{ project.name }} from collection">
+            <i class="fas fa-times"></i>
+        </button>
+        {% endif %}
+    </td>
+    <td>
+        {% with image=project.images.all.0 %}
+        {% if image %}
+        <img src="{{ image.image_thumbnail.url }}" alt="" class="library-thumb">
+        {% else %}
+        <span class="thumb-placeholder"><i class="fas fa-cube"></i></span>
+        {% endif %}
+        {% endwith %}
+    </td>
+    <td>
+        <a href="{% url 'projects:project_detail' project.pk %}" class="fw-semibold text-decoration-none">{{ project.name }}</a>
+        {% if project.designer %}<div class="text-muted small">{{ project.designer.name }}</div>{% endif %}
+    </td>
+    <td>
+        {% for c in project.collections.all %}<span class="premium-badge premium-badge-subtle me-1">{{ c.name }}</span>{% endfor %}
+    </td>
+    <td>
+        {% for tag in project.tags.all %}<span class="premium-badge premium-badge-subtle me-1"><i class="fas fa-tag text-primary"></i> {{ tag.name }}</span>{% endfor %}
+    </td>
+    <td>{% firstof project.parts_total project.total_parts "0" %}</td>
+    <td class="library-progress-cell">
+        <div class="d-flex align-items-center gap-2">
+            <div class="card-progress flex-grow-1" role="progressbar" aria-label="Print progress" aria-valuenow="{{ project.progress_pct }}" aria-valuemin="0" aria-valuemax="100">
+                <div class="card-progress-fill status-{{ project.status_key }}" style="width: {{ project.progress_pct }}%"></div>
+            </div>
+            <span class="small text-muted">{{ project.progress_pct }}%</span>
+        </div>
+    </td>
+    <td class="text-muted small text-nowrap">{{ project.updated_at|naturaltime }}</td>
+</tr>

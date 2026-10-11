@@ -1,43 +1,30 @@
 {% extends 'projects/base.html' %}
-{% load static %}
+{% load static query %}
 
 {% block title %}Projects - ModelFoundry{% endblock %}
 
 {% block extra_css %}
 <style>
-
-
     /* Search Bar Styling */
     .search-container {
         position: relative;
     }
     .search-container .search-icon {
         position: absolute;
-        left: 1.25rem;
+        left: 1rem;
         top: 50%;
         transform: translateY(-50%);
         color: var(--text-muted);
         z-index: 10;
-    }
-    .search-container .clear-icon {
-        position: absolute;
-        right: 1.25rem;
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--text-muted);
-        cursor: pointer;
-        display: none;
-        z-index: 10;
+        pointer-events: none;
     }
     .search-container input {
-        padding-left: 3rem !important;
-        padding-right: 3rem !important;
-        border-radius: 12px !important;
+        padding-left: 2.5rem !important;
+        border-radius: var(--radius-md) !important;
         background-color: var(--bg-darker) !important;
         border: 1px solid var(--border-dark) !important;
         color: var(--text-light) !important;
         font-weight: 500;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .search-container input::placeholder {
         color: var(--text-muted) !important;
@@ -46,37 +33,8 @@
     .search-container input:focus {
         background-color: var(--bg-dark) !important;
         border-color: var(--primary-color) !important;
-        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+        box-shadow: var(--focus-ring) !important;
         color: var(--text-light) !important;
-    }
-
-    /* Badge Styling (Bypassing cache) */
-    .premium-badge {
-        font-size: 0.75rem;
-        font-weight: 600;
-        padding: 0.35em 0.65em;
-        border-radius: 6px;
-        background-color: var(--bg-grey);
-        border: 1px solid var(--border-dark);
-        color: var(--text-light);
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-
-    /* Index Tabs */
-    #index-tabs .nav-link {
-        background-color: var(--bg-darker);
-        border: 1px solid var(--border-dark);
-        color: var(--text-muted);
-    }
-    #index-tabs .nav-link:hover {
-        color: var(--text-light);
-    }
-    #index-tabs .nav-link.active {
-        background-color: var(--primary-color);
-        border-color: var(--primary-color);
-        color: #fff;
     }
 
     /* Bulk-select checkbox on project cards */
@@ -89,10 +47,11 @@
         transition: opacity 0.15s ease;
     }
     .project-card:hover .project-select-wrap,
+    .project-card:focus-within .project-select-wrap,
     .project-card.is-selected .project-select-wrap {
         opacity: 1;
     }
-    .project-select {
+    .project-select-wrap .project-select {
         appearance: none;
         -webkit-appearance: none;
         width: 1.4rem;
@@ -105,10 +64,10 @@
         box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
         transition: background-color 0.15s ease, border-color 0.15s ease;
     }
-    .project-select:hover {
+    .project-select-wrap .project-select:hover {
         border-color: var(--primary-color);
     }
-    .project-select:checked {
+    .project-select-wrap .project-select:checked {
         background-color: var(--primary-color);
         border-color: var(--primary-color);
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3 3 7-7'/%3E%3C/svg%3E");
@@ -136,7 +95,8 @@
         justify-content: center;
         cursor: pointer;
     }
-    .project-card:hover .project-remove-btn {
+    .project-card:hover .project-remove-btn,
+    .project-card:focus-within .project-remove-btn {
         opacity: 1;
     }
     .project-remove-btn:hover {
@@ -144,48 +104,25 @@
         color: #fff;
     }
 
-    /* Collection cards */
-    .collection-card {
-        cursor: pointer;
+    /* List view */
+    .library-thumb {
+        width: 40px;
+        height: 40px;
+        object-fit: cover;
+        border-radius: var(--radius-sm);
     }
-    .collection-card.selected-collection .card {
-        border-color: var(--primary-color) !important;
-        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+    .library-table .thumb-placeholder {
+        width: 40px;
+        height: 40px;
     }
-    .collection-desc {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
+    .library-row-select { width: 2.5rem; }
+    .library-progress-cell { min-width: 140px; }
 
-    /* Bulk Action Bar (same pattern as project detail) */
-    .bulk-action-bar {
-        position: fixed;
-        bottom: -100px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(30, 30, 35, 0.95);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-        padding: 12px 24px;
-        z-index: 1050;
-        transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        display: flex;
-        align-items: center;
-        gap: 16px;
-    }
-    .bulk-action-bar.visible {
-        bottom: 30px;
-    }
     #addToCollectionMenu .dropdown-item {
         color: var(--text-light);
     }
     #addToCollectionMenu .dropdown-item:hover {
-        background-color: rgba(255, 255, 255, 0.1);
+        background-color: var(--surface-overlay-strong);
     }
 </style>
 {% endblock %}
@@ -193,175 +130,203 @@
 {% block content %}
 <div class="container-fluid premium-index-wrapper px-4 mt-4">
 
-    <!-- Hero Section -->
-    <div class="premium-hero animate-enter" style="animation-delay: 0ms;">
-        <div class="row align-items-center position-relative" style="z-index: 1;">
-            <div class="col-md-5">
-                <h1 class="fs-2 hero-title mb-1 fw-bold">Projects</h1>
-                <p class="text-muted mb-0 small">Manage your 3D printing projects, track parts, and monitor progress.</p>
-            </div>
-            <div class="col-md-7 mt-3 mt-md-0 d-flex flex-column flex-md-row align-items-md-center justify-content-md-end gap-3">
-                <div class="search-container flex-grow-1" style="max-width: 400px;">
-                    <i class="fas fa-search search-icon"></i>
-                    <input type="text" id="projectSearch" class="form-control" placeholder="Search projects & collections..." style="border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <i class="fas fa-times-circle clear-icon" id="clearSearch"></i>
-                </div>
-                <div class="d-flex gap-2">
-                    <a href="{% url 'projects:import_project' %}" class="btn btn-outline-secondary text-nowrap" style="border-radius: 10px;">
-                        <i class="fas fa-file-import me-1"></i>Import
-                    </a>
-                    <a href="{% url 'projects:project_create' %}" class="btn btn-primary text-nowrap" style="border-radius: 10px;">
-                        <i class="fas fa-plus me-1"></i>New Project
-                    </a>
-                </div>
-            </div>
+    <!-- Page header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+        <div>
+            <h1 class="fs-3 fw-bold mb-0">
+                {% if active_collection %}{{ active_collection.name }}{% else %}Projects{% endif %}<span class="text-muted fs-6 ms-2">{{ projects|length }}</span>
+            </h1>
+            {% if active_collection.description %}
+            <p class="text-muted small mb-0">{{ active_collection.description }}</p>
+            {% endif %}
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-glass d-lg-none" data-bs-toggle="offcanvas" data-bs-target="#librarySidebar" aria-controls="librarySidebar">
+                <i class="fas fa-filter me-1"></i>Filters
+            </button>
+            {% if active_collection %}
+            <button type="button" class="btn btn-glass" id="editCollectionBtn"
+                    data-collection-id="{{ active_collection.id }}"
+                    data-name="{{ active_collection.name }}"
+                    data-description="{{ active_collection.description }}"
+                    data-cover="{{ active_collection.cover_project_id|default_if_none:'' }}">
+                <i class="fas fa-edit me-1"></i>Edit
+            </button>
+            <button type="button" class="btn btn-outline-danger" id="deleteCollectionBtn"
+                    data-collection-id="{{ active_collection.id }}"
+                    data-name="{{ active_collection.name }}">
+                <i class="fas fa-trash me-1"></i>Delete
+            </button>
+            {% endif %}
+            <a href="{% url 'projects:import_project' %}" class="btn btn-glass text-nowrap">
+                <i class="fas fa-file-import me-1"></i>Import
+            </a>
+            <a href="{% url 'projects:project_create' %}" class="btn btn-primary text-nowrap">
+                <i class="fas fa-plus me-1"></i>New Project
+            </a>
         </div>
     </div>
 
-    <!-- Tab Navigation -->
-    <ul class="nav nav-pills mb-4 gap-2 animate-enter" id="index-tabs" role="tablist" style="animation-delay: 50ms;">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active px-4 py-2 fw-bold" data-bs-toggle="pill" data-bs-target="#all-projects-tab" type="button" role="tab">All Projects</button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link px-4 py-2 fw-bold" data-bs-toggle="pill" data-bs-target="#collections-tab" type="button" role="tab">Collections</button>
-        </li>
-    </ul>
-
-    <div class="tab-content">
-        <!-- ALL PROJECTS TAB -->
-        <div class="tab-pane fade show active" id="all-projects-tab" role="tabpanel">
-            <div class="row g-4" id="projectsContainer">
-                {% for project in projects %}
-                {% include 'projects/_project_card.html' with project=project card_delay="{{ forloop.counter|add:1 }}00" %}
-                {% empty %}
-                <div class="col-12 animate-enter" style="animation-delay: 200ms;">
-                    <div class="empty-state-dashed">
-                        <i class="fas fa-folder-open empty-icon"></i>
-                        <h3 class="fw-bold">No projects yet</h3>
-                        <p class="text-muted mb-4">Create your first 3D printing project to start organizing your files and parts.</p>
-                        <div class="d-flex justify-content-center gap-3">
-                            <a href="{% url 'projects:project_create' %}" class="btn btn-primary px-4 py-2" style="border-radius: 10px;">
-                                <i class="fas fa-plus me-2"></i> Create Project
-                            </a>
-                            <a href="{% url 'projects:import_project' %}" class="btn btn-outline-secondary px-4 py-2" style="border-radius: 10px;">
-                                <i class="fas fa-file-import me-2"></i> Import Project
-                            </a>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
+    <div class="library">
+        <!-- Sidebar -->
+        <aside class="library-sidebar offcanvas-lg offcanvas-start" id="librarySidebar" tabindex="-1" aria-labelledby="librarySidebarLabel">
+            <div class="offcanvas-header d-lg-none">
+                <h5 class="offcanvas-title fw-bold" id="librarySidebarLabel">Filters</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#librarySidebar" aria-label="Close"></button>
             </div>
-        </div>
+            <div class="offcanvas-body d-block p-lg-0">
+                <nav aria-label="Project filters" class="w-100">
+                    <div class="library-section-title mt-0">Library</div>
+                    <a class="library-link{% if not filters.status and not filters.collection and not filters.tag and not filters.designer %} active{% endif %}" href="{% url_with status='' collection='' tag='' designer='' %}">
+                        <i class="fas fa-border-all fa-fw"></i><span>All</span><span class="library-count">{{ status_counts.all }}</span>
+                    </a>
+                    <a class="library-link{% if filters.status == 'not_started' %} active{% endif %}" href="{% if filters.status == 'not_started' %}{% url_with status='' %}{% else %}{% url_with status='not_started' %}{% endif %}">
+                        <i class="fas fa-hourglass-start fa-fw"></i><span>Not started</span><span class="library-count">{{ status_counts.not_started }}</span>
+                    </a>
+                    <a class="library-link{% if filters.status == 'in_progress' %} active{% endif %}" href="{% if filters.status == 'in_progress' %}{% url_with status='' %}{% else %}{% url_with status='in_progress' %}{% endif %}">
+                        <i class="fas fa-spinner fa-fw"></i><span>In progress</span><span class="library-count">{{ status_counts.in_progress }}</span>
+                    </a>
+                    <a class="library-link{% if filters.status == 'complete' %} active{% endif %}" href="{% if filters.status == 'complete' %}{% url_with status='' %}{% else %}{% url_with status='complete' %}{% endif %}">
+                        <i class="fas fa-check-circle fa-fw"></i><span>Complete</span><span class="library-count">{{ status_counts.complete }}</span>
+                    </a>
 
-        <!-- COLLECTIONS TAB -->
-        <div class="tab-pane fade" id="collections-tab" role="tabpanel">
-            <div class="d-flex justify-content-between align-items-center mb-4 animate-enter flex-wrap gap-2" style="animation-delay: 100ms;">
-                <h2 class="h4 fw-bold mb-0"><i class="fas fa-layer-group me-2 text-primary"></i>Collections</h2>
-                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newCollectionModal" style="border-radius: 10px;">
-                    <i class="fas fa-plus me-1"></i>New Collection
-                </button>
-            </div>
-
-            <!-- Collection cards -->
-            <div class="row g-4 mb-4" id="collectionCardsRow">
-                {% for collection in collections %}
-                {% with cprojects=collection.projects.all image=collection.cover_image %}
-                <div class="col-md-6 col-lg-4 col-xl-3 collection-card animate-enter"
-                     style="animation-delay: {{ forloop.counter|add:'1' }}00ms;"
-                     data-collection-id="{{ collection.id }}"
-                     data-name="{{ collection.name|lower }}"
-                     data-description="{{ collection.description|lower }}">
-                    <div class="card h-100 premium-card hover-effect">
-                        <div class="project-image-container border-bottom border-dark">
-                            {% if image %}
-                            <img src="{{ image.image_thumbnail.url }}" alt="{{ collection.name }}">
-                            {% else %}
-                            <div class="no-image">
-                                <i class="fas fa-layer-group fa-3x text-muted"></i>
-                            </div>
-                            {% endif %}
-                        </div>
-                        <div class="card-body d-flex flex-column flex-grow-1">
-                            <h5 class="card-title fw-bold mb-2">{{ collection.name }}</h5>
-                            {% if collection.description %}
-                            <p class="collection-desc text-muted small mb-3">{{ collection.description }}</p>
-                            {% endif %}
-                            <div class="mt-auto">
-                                <span class="premium-badge">
-                                    <i class="fas fa-cubes text-info"></i> {{ cprojects|length }} Projects
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% empty %}
-                <div class="col-12 animate-enter" style="animation-delay: 200ms;">
-                    <div class="empty-state-dashed">
-                        <i class="fas fa-layer-group empty-icon"></i>
-                        <h3 class="fw-bold">No collections yet</h3>
-                        <p class="text-muted mb-4">Group related projects together to keep your workspace organized.</p>
-                        <button type="button" class="btn btn-primary px-4 py-2" data-bs-toggle="modal" data-bs-target="#newCollectionModal" style="border-radius: 10px;">
-                            <i class="fas fa-plus me-2"></i> Create Collection
+                    <div class="library-section-title d-flex align-items-center justify-content-between">
+                        <span>Collections</span>
+                        <button type="button" class="btn btn-sm btn-glass py-0 px-2" data-bs-toggle="modal" data-bs-target="#newCollectionModal" aria-label="New collection" title="New collection">
+                            <i class="fas fa-plus"></i>
                         </button>
                     </div>
-                </div>
-                {% endfor %}
-            </div>
+                    {% for c in collections %}
+                    <a class="library-link{% if filters.collection == c.id %} active{% endif %}" href="{% if filters.collection == c.id %}{% url_with collection='' %}{% else %}{% url_with collection=c.id %}{% endif %}">
+                        <i class="fas fa-layer-group fa-fw"></i><span class="text-truncate">{{ c.name }}</span><span class="library-count">{{ c.project_count }}</span>
+                    </a>
+                    {% empty %}
+                    <p class="text-muted small px-3 mb-0">No collections yet</p>
+                    {% endfor %}
 
-            <!-- Selected collection view -->
-            <div id="selectedCollectionView" style="display: none;">
-                <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
-                    <div>
-                        <h3 class="fw-bold mb-0" id="selectedCollectionName"></h3>
-                        <p class="text-muted small mb-0" id="selectedCollectionDescription"></p>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-secondary" id="editCollectionBtn" style="border-radius: 10px;">
-                            <i class="fas fa-edit me-1"></i>Edit
-                        </button>
-                        <button type="button" class="btn btn-outline-danger" id="deleteCollectionBtn" style="border-radius: 10px;">
-                            <i class="fas fa-trash me-1"></i>Delete
-                        </button>
-                    </div>
-                </div>
-                {% for collection in collections %}
-                <div class="collection-grid d-none"
-                     data-collection-id="{{ collection.id }}"
-                     data-title="{{ collection.name }}"
-                     data-desc="{{ collection.description }}"
-                     data-cover="{{ collection.cover_project_id|default_if_none:'' }}">
-                    {% with cprojects=collection.projects.all %}
-                    {% if cprojects %}
-                    <div class="row g-4">
-                        {% for project in cprojects %}
-                        {% include 'projects/_project_card.html' with project=project card_delay="{{ forloop.counter }}00" collection_id=collection.id %}
+                    {% if tag_facets %}
+                    <div class="library-section-title">Tags</div>
+                    {% for t in tag_facets|slice:":12" %}
+                    <a class="library-link{% if filters.tag == t.name %} active{% endif %}" href="{% if filters.tag == t.name %}{% url_with tag='' %}{% else %}{% url_with tag=t.name %}{% endif %}">
+                        <i class="fas fa-tag fa-fw"></i><span class="text-truncate">{{ t.name }}</span><span class="library-count">{{ t.n }}</span>
+                    </a>
+                    {% endfor %}
+                    {% if tag_facets|length > 12 %}
+                    <div class="collapse" id="moreTags">
+                        {% for t in tag_facets|slice:"12:" %}
+                        <a class="library-link{% if filters.tag == t.name %} active{% endif %}" href="{% if filters.tag == t.name %}{% url_with tag='' %}{% else %}{% url_with tag=t.name %}{% endif %}">
+                            <i class="fas fa-tag fa-fw"></i><span class="text-truncate">{{ t.name }}</span><span class="library-count">{{ t.n }}</span>
+                        </a>
                         {% endfor %}
                     </div>
-                    {% else %}
-                    <div class="empty-state-dashed" style="padding: 2rem;">
-                        <i class="fas fa-cube empty-icon"></i>
-                        <p class="text-muted mb-0">No projects in this collection yet. Select projects on the <strong>All Projects</strong> tab and use <strong>Add to collection</strong>.</p>
-                    </div>
+                    <a class="library-link text-muted small" data-bs-toggle="collapse" href="#moreTags" role="button" aria-expanded="false" aria-controls="moreTags">Show all ({{ tag_facets|length }})</a>
                     {% endif %}
-                    {% endwith %}
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+                    {% endif %}
 
-    <!-- No Results Message -->
-    <div class="no-results animate-enter" id="noResults" style="display: none; animation-delay: 0ms;">
-        <div class="empty-state-dashed mx-auto" style="max-width: 600px;">
-            <i class="fas fa-search empty-icon"></i>
-            <h3 class="fw-bold">No matches found</h3>
-            <p class="text-muted mb-4">We couldn't find any projects or collections matching your search query.</p>
-            <button class="btn btn-outline-secondary px-4 py-2" id="resetSearch" style="border-radius: 10px;">
-                <i class="fas fa-undo me-2"></i> Clear Search
-            </button>
-        </div>
+                    {% if designer_facets %}
+                    <div class="library-section-title">Designers</div>
+                    {% for d in designer_facets %}
+                    <a class="library-link{% if filters.designer == d.id %} active{% endif %}" href="{% if filters.designer == d.id %}{% url_with designer='' %}{% else %}{% url_with designer=d.id %}{% endif %}">
+                        <i class="fas fa-user-pen fa-fw"></i><span class="text-truncate">{{ d.name }}</span><span class="library-count">{{ d.n }}</span>
+                    </a>
+                    {% endfor %}
+                    {% endif %}
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Main pane -->
+        <section class="library-main">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                <form method="get" class="search-container d-flex flex-wrap align-items-center gap-2 flex-grow-1" id="projectSearchForm" role="search">
+                    <div class="position-relative flex-grow-1" style="max-width: 420px;">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="search" name="q" id="projectSearch" class="form-control" value="{{ filters.q }}" placeholder="Search name, tag, designer, file…" aria-label="Search projects">
+                    </div>
+                    {% if filters.collection %}<input type="hidden" name="collection" value="{{ filters.collection }}">{% endif %}
+                    {% if filters.tag %}<input type="hidden" name="tag" value="{{ filters.tag }}">{% endif %}
+                    {% if filters.designer %}<input type="hidden" name="designer" value="{{ filters.designer }}">{% endif %}
+                    {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+                    {% if request.GET.view %}<input type="hidden" name="view" value="{{ view_mode }}">{% endif %}
+                    <select name="sort" class="form-select form-select-sm w-auto" id="projectSort" aria-label="Sort projects">
+                        <option value="recent"{% if filters.sort == 'recent' %} selected{% endif %}>Recently updated</option>
+                        <option value="name"{% if filters.sort == 'name' %} selected{% endif %}>Name</option>
+                        <option value="progress"{% if filters.sort == 'progress' %} selected{% endif %}>Progress</option>
+                        <option value="created"{% if filters.sort == 'created' %} selected{% endif %}>Newest</option>
+                    </select>
+                </form>
+                <div class="btn-group" role="group" aria-label="View mode">
+                    <a class="btn btn-sm btn-glass{% if view_mode == 'grid' %} active{% endif %}" href="{% url_with view='grid' %}" aria-label="Grid view"{% if view_mode == 'grid' %} aria-current="true"{% endif %}><i class="fas fa-grip"></i></a>
+                    <a class="btn btn-sm btn-glass{% if view_mode == 'list' %} active{% endif %}" href="{% url_with view='list' %}" aria-label="List view"{% if view_mode == 'list' %} aria-current="true"{% endif %}><i class="fas fa-list"></i></a>
+                </div>
+            </div>
+
+            <!-- Active filter chips -->
+            <div class="active-filters d-flex flex-wrap align-items-center gap-2{% if has_filters %} mb-3{% endif %}">
+                {% if has_filters %}
+                {% if filters.q %}<a class="filter-chip" href="{% url_with q='' %}">Search: {{ filters.q }} <i class="fas fa-times"></i></a>{% endif %}
+                {% if active_collection %}<a class="filter-chip" href="{% url_with collection='' %}">Collection: {{ active_collection.name }} <i class="fas fa-times"></i></a>{% endif %}
+                {% if filters.status %}<a class="filter-chip" href="{% url_with status='' %}">Status: {% if filters.status == 'not_started' %}Not started{% elif filters.status == 'in_progress' %}In progress{% else %}Complete{% endif %} <i class="fas fa-times"></i></a>{% endif %}
+                {% if filters.tag %}<a class="filter-chip" href="{% url_with tag='' %}">Tag: {{ filters.tag }} <i class="fas fa-times"></i></a>{% endif %}
+                {% if filters.designer %}<a class="filter-chip" href="{% url_with designer='' %}">Designer: {% firstof active_designer.name filters.designer %} <i class="fas fa-times"></i></a>{% endif %}
+                <a class="small text-muted ms-1" href="{% url 'projects:project_list' %}?{% if request.GET.view %}view={{ view_mode }}&amp;{% endif %}sort={{ filters.sort }}">Clear all</a>
+                {% endif %}
+            </div>
+
+            <!-- Results -->
+            <div id="projectResults">
+                {% if projects %}
+                {% if view_mode == 'list' %}
+                <div class="table-responsive">
+                    <table class="table mf-table align-middle library-table">
+                        <thead>
+                            <tr>
+                                <th scope="col"><span class="visually-hidden">Select</span></th>
+                                <th scope="col"><span class="visually-hidden">Thumbnail</span></th>
+                                <th scope="col">Name</th>
+                                <th scope="col">Collections</th>
+                                <th scope="col">Tags</th>
+                                <th scope="col">Parts</th>
+                                <th scope="col">Progress</th>
+                                <th scope="col">Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for project in projects %}
+                            {% include 'projects/_project_row.html' with project=project collection_id=active_collection.id %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="row g-4">
+                    {% for project in projects %}
+                    {% include 'projects/_project_card.html' with project=project card_delay=forloop.counter|stringformat:"d00" collection_id=active_collection.id %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% elif active_collection and not filters.q and not filters.tag and not filters.designer and not filters.status %}
+                {% include 'projects/includes/_empty_state.html' with icon='fa-layer-group' title='This collection is empty' text='Select projects from All projects and use Add to collection.' %}
+                {% elif has_filters %}
+                {% url 'projects:project_list' as list_url %}
+                {% include 'projects/includes/_empty_state.html' with icon='fa-search' title='No matches' text='Try removing a filter or searching for something else.' action_label='Clear filters' action_url=list_url %}
+                {% else %}
+                <div class="empty-state-dashed animate-enter" style="animation-delay: 200ms;">
+                    <i class="fas fa-folder-open empty-icon"></i>
+                    <h3 class="fw-bold">No projects yet</h3>
+                    <p class="text-muted mb-4">Create your first 3D printing project to start organizing your files and parts.</p>
+                    <div class="d-flex justify-content-center gap-3">
+                        <a href="{% url 'projects:project_create' %}" class="btn btn-primary px-4 py-2">
+                            <i class="fas fa-plus me-2"></i> Create Project
+                        </a>
+                        <a href="{% url 'projects:import_project' %}" class="btn btn-glass px-4 py-2">
+                            <i class="fas fa-file-import me-2"></i> Import Project
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </section>
     </div>
 </div>
 
@@ -369,7 +334,7 @@
 <div class="bulk-action-bar" id="bulkActionBar">
     <span class="fw-bold text-light" id="bulkSelectionCount">0 selected</span>
     <div class="dropdown">
-        <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 10px;">
+        <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="fas fa-layer-group me-1"></i>Add to collection
         </button>
         <ul class="dropdown-menu dropdown-menu-end shadow border-secondary bg-dark" id="addToCollectionMenu">
@@ -380,22 +345,23 @@
             <li><a class="dropdown-item text-primary fw-bold" href="#" id="newCollectionFromSelection"><i class="fas fa-plus me-1"></i>New collection…</a></li>
         </ul>
     </div>
-    <button type="button" class="btn btn-outline-secondary" id="clearSelection" style="border-radius: 10px;">Clear</button>
+    <button type="button" class="btn btn-glass" id="clearSelection">Clear</button>
 </div>
 
 <!-- New Collection Modal -->
 <div class="modal fade" id="newCollectionModal" tabindex="-1" aria-labelledby="newCollectionModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+        <div class="modal-content mf-modal">
             <div class="modal-header border-bottom border-dark">
                 <h5 class="modal-title fw-bold" id="newCollectionModalLabel">Create New Collection</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="newCollectionForm">
+            <form id="newCollectionForm" novalidate>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="newCollectionName" class="form-label fw-bold">Name</label>
                         <input type="text" class="form-control" id="newCollectionName" maxlength="100" required placeholder="e.g. Living Room Set">
+                        <div class="invalid-feedback">Please enter a collection name.</div>
                     </div>
                     <div class="mb-2">
                         <label for="newCollectionDescription" class="form-label fw-bold">Description <span class="text-muted fw-normal">(optional)</span></label>
@@ -403,7 +369,7 @@
                     </div>
                 </div>
                 <div class="modal-footer border-top border-dark">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Create Collection</button>
                 </div>
             </form>
@@ -414,16 +380,17 @@
 <!-- Edit Collection Modal -->
 <div class="modal fade" id="editCollectionModal" tabindex="-1" aria-labelledby="editCollectionModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <div class="modal-content premium-card border-0" style="background: var(--bg-dark); border-radius: 16px; box-shadow: 0 25px 50px rgba(0,0,0,0.5);">
+        <div class="modal-content mf-modal">
             <div class="modal-header border-bottom border-dark">
                 <h5 class="modal-title fw-bold" id="editCollectionModalLabel">Edit Collection</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="editCollectionForm">
+            <form id="editCollectionForm" novalidate>
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="editCollectionName" class="form-label fw-bold">Name</label>
                         <input type="text" class="form-control" id="editCollectionName" maxlength="100" required>
+                        <div class="invalid-feedback">Please enter a collection name.</div>
                     </div>
                     <div class="mb-3">
                         <label for="editCollectionDescription" class="form-label fw-bold">Description <span class="text-muted fw-normal">(optional)</span></label>
@@ -433,14 +400,20 @@
                         <label for="editCollectionCover" class="form-label fw-bold">Cover Project <span class="text-muted fw-normal">(optional — card art)</span></label>
                         <select class="form-select" id="editCollectionCover">
                             <option value="">Auto (first project's image)</option>
-                            {% for project in projects %}
+                            {% if active_collection %}
+                            {% for project in active_collection.projects.all %}
                             <option value="{{ project.id }}">{{ project.name }}</option>
                             {% endfor %}
+                            {% else %}
+                            {% for project in all_projects %}
+                            <option value="{{ project.id }}">{{ project.name }}</option>
+                            {% endfor %}
+                            {% endif %}
                         </select>
                     </div>
                 </div>
                 <div class="modal-footer border-top border-dark">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary"><i class="fas fa-check me-1"></i>Save Changes</button>
                 </div>
             </form>
@@ -453,17 +426,15 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const CSRF = '{{ csrf_token }}';
-        const searchInput = document.getElementById('projectSearch');
-        const clearButton = document.getElementById('clearSearch');
-        const noResults = document.getElementById('noResults');
-        const resetButton = document.getElementById('resetSearch');
+        const PROJECT_LIST_URL = '{% url "projects:project_list" %}';
         const bulkBar = document.getElementById('bulkActionBar');
+        const searchForm = document.getElementById('projectSearchForm');
+        const searchInput = document.getElementById('projectSearch');
 
-        let selectedCollectionId = null;
         let editCollectionId = null;
         let pendingProjectIds = [];
 
-        function postJSON(url, data) {
+        function postJSON(url, data, successMsg = 'Saved', onSuccess = null) {
             $.ajax({
                 url: url,
                 method: 'POST',
@@ -472,101 +443,64 @@
                 headers: { 'X-CSRFToken': CSRF },
                 success: function(response) {
                     if (response.status === 'success') {
-                        location.reload();
+                        if (onSuccess) {
+                            onSuccess(response);
+                        } else {
+                            MF.reloadWithToast(successMsg);
+                        }
                     } else {
-                        alert('Error: ' + response.message);
+                        MF.toast('Error: ' + response.message, 'error');
                     }
                 },
                 error: function(xhr) {
-                    alert('Error. Please try again.');
+                    const msg = xhr.responseJSON && xhr.responseJSON.message;
+                    MF.toast(msg ? 'Error: ' + msg : 'Error. Please try again.', 'error');
                 }
             });
         }
 
-        function activePane() {
-            const active = document.querySelector('#index-tabs .nav-link.active');
-            return active ? active.getAttribute('data-bs-target') : '#all-projects-tab';
+        // ----- Live search (server-rendered results swapped in place) -----
+        let searchTimer = null;
+        let searchSeq = 0;
+
+        function searchUrl() {
+            const params = new URLSearchParams(new FormData(searchForm));
+            if (!params.get('q')) params.delete('q');
+            const qs = params.toString();
+            return PROJECT_LIST_URL + (qs ? '?' + qs : '');
         }
 
-        // ----- Search (scoped to the active tab) -----
-        function cardMatches(card, term) {
-            const name = $(card).data('name') || '';
-            const description = $(card).data('description') || '';
-            const tags = $(card).data('tags') || '';
-            const files = $(card).data('files') || '';
-            return name.includes(term) ||
-                description.includes(term) ||
-                tags.includes(term) ||
-                files.includes(term);
-        }
-
-        function filterProjects() {
-            const searchTerm = searchInput.value.toLowerCase().trim();
-            clearButton.style.display = searchTerm.length > 0 ? 'block' : 'none';
-
-            let matchCount = 0;
-            let cardCount = 0;
-
-            if (activePane() === '#all-projects-tab') {
-                $('#all-projects-tab .project-card').each(function() {
-                    cardCount++;
-                    const isMatch = !searchTerm || cardMatches(this, searchTerm);
-                    if (isMatch) {
-                        matchCount++;
-                        if ($(this).is(':hidden')) {
-                            $(this).removeClass('animate-enter').stop(true, false).fadeIn(200);
-                        }
-                    } else {
-                        if ($(this).is(':visible')) {
-                            $(this).removeClass('animate-enter').stop(true, false).fadeOut(200);
-                        }
-                    }
+        function runLiveSearch() {
+            const url = searchUrl();
+            const seq = ++searchSeq;
+            fetch(url, { headers: { 'X-Requested-With': 'fetch' } })
+                .then(r => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))
+                .then(html => {
+                    if (seq !== searchSeq) return;
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    ['#projectResults', '.active-filters'].forEach(sel => {
+                        const fresh = doc.querySelector(sel);
+                        const current = document.querySelector(sel);
+                        if (fresh && current) current.replaceWith(fresh);
+                    });
+                    history.replaceState(null, '', url);
+                    refreshBulkBar();
+                })
+                .catch(err => {
+                    if (seq === searchSeq) MF.toast('Search failed: ' + err.message, 'error');
                 });
-            } else {
-                $('#collectionCardsRow .collection-card').each(function() {
-                    cardCount++;
-                    const isMatch = !searchTerm || cardMatches(this, searchTerm);
-                    if (isMatch) {
-                        matchCount++;
-                        if ($(this).is(':hidden')) {
-                            $(this).removeClass('animate-enter').stop(true, false).fadeIn(200);
-                        }
-                    } else {
-                        if ($(this).is(':visible')) {
-                            $(this).removeClass('animate-enter').stop(true, false).fadeOut(200);
-                        }
-                    }
-                });
-            }
-
-            const showNoResults = searchTerm.length > 0 && cardCount > 0 && matchCount === 0;
-            if (showNoResults) {
-                if ($(noResults).is(':hidden')) {
-                    $(noResults).removeClass('animate-enter').stop(true, false).fadeIn(200);
-                }
-            } else {
-                if ($(noResults).is(':visible')) {
-                    $(noResults).removeClass('animate-enter').stop(true, false).fadeOut(200);
-                }
-            }
         }
 
-        searchInput.addEventListener('input', filterProjects);
-        clearButton.addEventListener('click', function() {
-            searchInput.value = '';
-            filterProjects();
-            searchInput.focus();
-        });
-        resetButton.addEventListener('click', function() {
-            searchInput.value = '';
-            filterProjects();
-            searchInput.focus();
-        });
-        $('#index-tabs').on('shown.bs.tab', 'button.nav-link', function() {
-            filterProjects();
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(runLiveSearch, 300);
         });
 
-        // ----- Bulk selection (All Projects tab) -----
+        document.getElementById('projectSort').addEventListener('change', function() {
+            searchForm.submit();
+        });
+
+        // ----- Bulk selection -----
         function getSelectedIds() {
             return $('.project-select:checked').map(function() {
                 return $(this).data('project-id');
@@ -594,7 +528,7 @@
             e.preventDefault();
             const ids = getSelectedIds();
             if (ids.length === 0) return;
-            postJSON(`/collections/${$(this).data('collection-id')}/add-projects/`, { project_ids: ids });
+            postJSON(`/collections/${$(this).data('collection-id')}/add-projects/`, { project_ids: ids }, 'Added to collection');
         });
 
         $('#newCollectionFromSelection').on('click', function(e) {
@@ -604,9 +538,24 @@
             openNewCollectionModal();
         });
 
+        // ----- Collection name validation -----
+        $('#newCollectionName, #editCollectionName').on('input', function() {
+            this.classList.remove('is-invalid');
+        });
+
+        function requireName($input) {
+            const name = $input.val().trim();
+            if (!name) {
+                $input.addClass('is-invalid').trigger('focus');
+                return null;
+            }
+            return name;
+        }
+
         // ----- New collection modal -----
         function openNewCollectionModal() {
             $('#newCollectionForm')[0].reset();
+            $('#newCollectionName').removeClass('is-invalid');
             const note = pendingProjectIds.length > 0
                 ? `The ${pendingProjectIds.length} selected project(s) will be added to this collection.`
                 : '';
@@ -622,13 +571,18 @@
             bootstrap.Modal.getOrCreateInstance(document.getElementById('newCollectionModal')).show();
         }
 
+        // Sidebar "+" opens the modal directly; reset any pending selection state.
+        document.getElementById('newCollectionModal').addEventListener('hidden.bs.modal', function() {
+            pendingProjectIds = [];
+            $('#newCollectionNote').remove();
+            $('#newCollectionModalLabel').text('Create New Collection');
+            $('#newCollectionName').removeClass('is-invalid');
+        });
+
         $('#newCollectionForm').on('submit', function(e) {
             e.preventDefault();
-            const name = $('#newCollectionName').val().trim();
-            if (!name) {
-                alert('Please enter a collection name.');
-                return;
-            }
+            const name = requireName($('#newCollectionName'));
+            if (!name) return;
             const data = {
                 name: name,
                 description: $('#newCollectionDescription').val().trim()
@@ -636,79 +590,64 @@
             if (pendingProjectIds.length > 0) {
                 data.project_ids = pendingProjectIds;
             }
-            postJSON('{% url "projects:collection_create" %}', data);
+            postJSON('{% url "projects:collection_create" %}', data, 'Collection created', function(response) {
+                MF.redirectWithToast(PROJECT_LIST_URL + '?collection=' + response.id, 'Collection created');
+            });
         });
-
-        // ----- Collection card selection -----
-        $('#collectionCardsRow').on('click', '.collection-card', function() {
-            const id = $(this).data('collection-id');
-            if (selectedCollectionId === id) {
-                deselectCollection();
-                return;
-            }
-            selectedCollectionId = id;
-            $('.collection-card').removeClass('selected-collection');
-            $(this).addClass('selected-collection');
-            const $grid = $(`.collection-grid[data-collection-id="${id}"]`);
-            $('.collection-grid').addClass('d-none');
-            $grid.removeClass('d-none');
-            $('#selectedCollectionName').text($grid.data('title'));
-            $('#selectedCollectionDescription').text($grid.data('desc') || '');
-            $('#selectedCollectionView').css('display', 'block');
-        });
-
-        function deselectCollection() {
-            selectedCollectionId = null;
-            $('.collection-card').removeClass('selected-collection');
-            $('.collection-grid').addClass('d-none');
-            $('#selectedCollectionView').css('display', 'none');
-        }
 
         // ----- Edit / delete collection -----
         $('#editCollectionBtn').on('click', function() {
-            if (selectedCollectionId === null) return;
-            const $grid = $(`.collection-grid[data-collection-id="${selectedCollectionId}"]`);
-            editCollectionId = selectedCollectionId;
-            $('#editCollectionName').val($grid.data('title'));
-            $('#editCollectionDescription').val($grid.data('desc') || '');
-            $('#editCollectionCover').val($grid.data('cover') || '');
+            const btn = this;
+            editCollectionId = btn.dataset.collectionId;
+            $('#editCollectionName').val(btn.dataset.name).removeClass('is-invalid');
+            $('#editCollectionDescription').val(btn.dataset.description || '');
+            $('#editCollectionCover').val(btn.dataset.cover || '');
             bootstrap.Modal.getOrCreateInstance(document.getElementById('editCollectionModal')).show();
         });
 
         $('#editCollectionForm').on('submit', function(e) {
             e.preventDefault();
             if (editCollectionId === null) return;
-            const name = $('#editCollectionName').val().trim();
-            if (!name) {
-                alert('Please enter a collection name.');
-                return;
-            }
+            const name = requireName($('#editCollectionName'));
+            if (!name) return;
             postJSON(`/collections/${editCollectionId}/update/`, {
                 name: name,
                 description: $('#editCollectionDescription').val().trim(),
                 cover_project_id: $('#editCollectionCover').val() || null
-            });
+            }, 'Collection updated');
         });
 
         $('#deleteCollectionBtn').on('click', function() {
-            if (selectedCollectionId === null) return;
-            const $grid = $(`.collection-grid[data-collection-id="${selectedCollectionId}"]`);
-            if (!confirm(`Delete collection "${$grid.data('title')}"? Projects inside it are not deleted.`)) return;
-            postJSON(`/collections/${selectedCollectionId}/delete/`, {});
-        });
-
-        // ----- Remove project from collection (per card) -----
-        $(document).on('click', '.project-remove-btn', function(e) {
-            e.preventDefault();
-            const $btn = $(this);
-            if (!confirm('Remove this project from the collection?')) return;
-            postJSON(`/collections/${$btn.data('collection-id')}/remove-project/`, {
-                project_id: $btn.data('project-id')
+            const id = this.dataset.collectionId;
+            MF.confirm({
+                title: 'Delete collection?',
+                message: `Delete collection "${this.dataset.name}"? Projects inside it are not deleted.`,
+                confirmLabel: 'Delete',
+                danger: true
+            }).then(ok => {
+                if (!ok) return;
+                postJSON(`/collections/${id}/delete/`, {}, 'Collection deleted', function() {
+                    MF.redirectWithToast(PROJECT_LIST_URL, 'Collection deleted');
+                });
             });
         });
 
-        // Initialize (in case there's a value already)
-        filterProjects();
+        // ----- Remove project from collection (card button or list row button) -----
+        $(document).on('click', '.project-remove-btn, .project-remove-row', function(e) {
+            e.preventDefault();
+            const $btn = $(this);
+            MF.confirm({
+                title: 'Remove from collection?',
+                message: 'Remove this project from the collection?',
+                confirmLabel: 'Remove',
+                danger: true
+            }).then(ok => {
+                if (!ok) return;
+                postJSON(`/collections/${$btn.data('collection-id')}/remove-project/`, {
+                    project_id: $btn.data('project-id')
+                }, 'Removed from collection');
+            });
+        });
     });
 </script>
 {% endblock %}

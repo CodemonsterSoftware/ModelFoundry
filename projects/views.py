@@ -22,7 +22,8 @@ from forge.services.ofd_client import OFDClient
 from .color_utils import get_closest_color_name
 from forge.module_registry import registry
 from django.db import transaction
-from django.db.models import Count, Sum, Max, Q, F
+from django.db.models import Count, Sum, Max, Q, F, OuterRef, Subquery, Case, When, Value, IntegerField, CharField
+from django.db.models.functions import Coalesce, Lower
 from django.contrib.auth.decorators import login_required
 from django.utils.text import slugify
 import tempfile
@@ -54,14 +55,116 @@ logger = logging.getLogger(__name__)
 
 # Create your views here.
 
+PROJECT_STATUSES = ('not_started', 'in_progress', 'complete')
+PROJECT_SORTS = {
+    'recent': ('-updated_at',),
+    'name': (Lower('name'),),
+    'progress': ('-progress_pct', Lower('name')),
+    'created': ('-created_at',),
+}
+PROJECT_VIEW_MODES = ('grid', 'list')
+
+
+def _int_or_none(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def annotated_projects():
+    """Projects annotated with leaf-part totals, progress_pct and status_key."""
+    leaf = Part.objects.filter(project=OuterRef('pk'), sub_parts__isnull=True).order_by().values('project')
+    parts_total = Coalesce(Subquery(leaf.annotate(s=Sum('quantity')).values('s')), 0)
+    parts_done = Coalesce(Subquery(leaf.annotate(s=Sum('completed')).values('s')), 0)
+    return Project.objects.annotate(parts_total=parts_total, parts_done=parts_done).annotate(
+        progress_pct=Case(
+            When(parts_total__gt=0, then=F('parts_done') * 100 / F('parts_total')),
+            default=Value(0), output_field=IntegerField()),
+        status_key=Case(
+            When(parts_total__gt=0, parts_done__gte=F('parts_total'), then=Value('complete')),
+            When(parts_done__gt=0, then=Value('in_progress')),
+            default=Value('not_started'), output_field=CharField()),
+    )
+
+
 class ProjectListView(ListView):
     model = Project
     template_name = 'projects/project_list.html'
     context_object_name = 'projects'
 
+    def _clean_filters(self):
+        params = self.request.GET
+        status = params.get('status', '')
+        sort = params.get('sort', '')
+        return {
+            'q': params.get('q', '').strip(),
+            'collection': _int_or_none(params.get('collection')),
+            'tag': params.get('tag', ''),
+            'designer': _int_or_none(params.get('designer')),
+            'status': status if status in PROJECT_STATUSES else '',
+            'sort': sort if sort in PROJECT_SORTS else 'recent',
+        }
+
+    def get(self, request, *args, **kwargs):
+        self.filters = self._clean_filters()
+        self.active_collection = None
+        if self.filters['collection'] is not None:
+            self.active_collection = Collection.objects.filter(pk=self.filters['collection']).first()
+            if self.active_collection is None:
+                messages.warning(request, 'Collection not found')
+                return redirect('projects:project_list')
+        view_param = request.GET.get('view')
+        if view_param in PROJECT_VIEW_MODES:
+            self.view_mode = view_param
+        elif request.COOKIES.get('project_view') in PROJECT_VIEW_MODES:
+            self.view_mode = request.COOKIES['project_view']
+        else:
+            self.view_mode = 'grid'
+        response = super().get(request, *args, **kwargs)
+        if view_param in PROJECT_VIEW_MODES:
+            response.set_cookie('project_view', view_param, max_age=365 * 24 * 60 * 60, path='/')
+        return response
+
+    def get_queryset(self):
+        f = self.filters
+        qs = annotated_projects().select_related('designer').prefetch_related('tags', 'images', 'collections')
+        if f['q']:
+            q = f['q']
+            qs = qs.filter(
+                Q(name__icontains=q) | Q(description__icontains=q) | Q(tags__name__icontains=q)
+                | Q(designer__name__icontains=q) | Q(images__image__icontains=q)
+            ).distinct()
+        if f['collection'] is not None:
+            qs = qs.filter(collections__id=f['collection'])
+        if f['tag']:
+            qs = qs.filter(tags__name=f['tag'])
+        if f['designer'] is not None:
+            qs = qs.filter(designer_id=f['designer'])
+        if f['status']:
+            qs = qs.filter(status_key=f['status'])
+        return qs.order_by(*PROJECT_SORTS[f['sort']])
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['collections'] = Collection.objects.prefetch_related('projects', 'cover_project__images').all()
+        context['collections'] = (
+            Collection.objects.annotate(project_count=Count('projects', distinct=True))
+            .prefetch_related('projects', 'cover_project__images').order_by(Lower('name'))
+        )
+        status_counts = {key: 0 for key in PROJECT_STATUSES}
+        for row in annotated_projects().order_by().values('status_key').annotate(c=Count('id')):
+            status_counts[row['status_key']] = row['c']
+        status_counts['all'] = sum(status_counts.values())
+        context['status_counts'] = status_counts
+        context['tag_facets'] = Tag.objects.annotate(n=Count('projects', distinct=True)).filter(n__gt=0).order_by('-n', Lower('name'))
+        context['designer_facets'] = Designer.objects.annotate(n=Count('projects', distinct=True)).filter(n__gt=0).order_by(Lower('name'))
+        context['active_collection'] = self.active_collection
+        context['filters'] = self.filters
+        context['view_mode'] = self.view_mode
+        context['all_projects'] = Project.objects.order_by(Lower('name')).only('id', 'name')
+        context['active_designer'] = next(
+            (d for d in context['designer_facets'] if d.id == self.filters['designer']), None)
+        context['has_filters'] = any(self.filters[k] not in ('', None) for k in ('q', 'collection', 'tag', 'designer', 'status'))
         return context
 
 class ProjectDetailView(DetailView):

@@ -1,57 +1,56 @@
 {% comment %}Project card. Context: project, card_delay (ms), collection_id (optional — renders remove button in collection context){% endcomment %}
 <div class="col-md-6 col-lg-4 col-xl-3 project-card animate-enter position-relative"
      style="animation-delay: {{ card_delay|default:'0' }}ms;"
-     data-name="{{ project.name|lower }}"
-     data-description="{{ project.description|lower }}"
-     data-tags="{% for tag in project.tags.all %}{{ tag.name|lower }} {% endfor %}"
-     data-files="{% for image in project.images.all %}{{ image.image.name|lower }} {% endfor %}"
      {% if collection_id %}data-collection-id="{{ collection_id }}" data-project-id="{{ project.id }}"{% endif %}>
     <div class="card h-100 premium-card hover-effect">
         <a href="{% url 'projects:project_detail' project.pk %}" class="card-link d-flex flex-column h-100">
             <div class="project-image-container border-bottom border-dark">
-                {% if project.images.first %}
-                <img src="{{ project.images.first.image_thumbnail.url }}" alt="{{ project.name }}">
+                {% with image=project.images.all.0 %}
+                {% if image %}
+                <img src="{{ image.image_thumbnail.url }}" alt="{{ project.name }}">
                 {% else %}
                 <div class="no-image">
                     <i class="fas fa-cube fa-3x text-muted"></i>
                 </div>
                 {% endif %}
+                {% endwith %}
             </div>
             <div class="card-body d-flex flex-column flex-grow-1">
-                <h5 class="card-title fw-bold mb-3">{{ project.name }}</h5>
+                <h5 class="card-title fw-bold mb-1">{{ project.name }}</h5>
+                {% if project.designer %}
+                <div class="text-muted small mb-2">{{ project.designer.name }}</div>
+                {% endif %}
 
-                <div class="mb-3">
+                <div class="mb-3 mt-2">
                     <span class="premium-badge">
-                        <i class="fas fa-cube text-info"></i> {{ project.total_parts }} Parts
-                    </span>
-                    <span class="premium-badge">
-                        {% if project.progress_percentage == 100 %}
-                        <i class="fas fa-check-circle text-success"></i> 100% Complete
-                        {% elif project.progress_percentage > 0 %}
-                        <i class="fas fa-tasks text-warning"></i> {{ project.progress_percentage }}% Complete
-                        {% else %}
-                        <i class="fas fa-hourglass-start text-muted"></i> 0% Complete
-                        {% endif %}
+                        <i class="fas fa-cube text-info"></i> {% firstof project.parts_total project.total_parts "0" %} Parts
                     </span>
                 </div>
 
                 {% if project.tags.all %}
-                <div class="mt-auto pt-2 d-flex flex-wrap gap-2">
+                <div class="pt-2 mb-3 d-flex flex-wrap gap-2">
                     {% for tag in project.tags.all %}
-                        <span class="premium-badge" style="background-color: var(--bg-darker); border-color: var(--border-dark);">
+                        <span class="premium-badge premium-badge-subtle">
                             <i class="fas fa-tag text-primary"></i> {{ tag.name }}
                         </span>
                     {% endfor %}
                 </div>
                 {% endif %}
+
+                <div class="mt-auto">
+                    <div class="card-progress" role="progressbar" aria-label="Print progress" aria-valuenow="{{ project.progress_pct }}" aria-valuemin="0" aria-valuemax="100">
+                        <div class="card-progress-fill status-{{ project.status_key }}" style="width: {{ project.progress_pct }}%"></div>
+                    </div>
+                    <div class="small text-muted mt-1">{{ project.progress_pct }}% printed</div>
+                </div>
             </div>
         </a>
         {% if not collection_id %}
         <label class="project-select-wrap" title="Select for bulk actions">
-            <input type="checkbox" class="project-select" data-project-id="{{ project.id }}">
+            <input type="checkbox" class="project-select" data-project-id="{{ project.id }}" aria-label="Select {{ project.name }}">
         </label>
         {% else %}
-        <button type="button" class="project-remove-btn" data-collection-id="{{ collection_id }}" data-project-id="{{ project.id }}" title="Remove from collection">
+        <button type="button" class="project-remove-btn" data-collection-id="{{ collection_id }}" data-project-id="{{ project.id }}" title="Remove from collection" aria-label="Remove {{ project.name }} from collection">
             <i class="fas fa-times"></i>
         </button>
         {% endif %}

@@ -2431,3 +2431,78 @@ class SliceEstimateTests(TestCase):
         )
         response = self._post(machine=foreign)
         self.assertEqual(response.status_code, 404)
+
+
+class ProjectLibraryTests(TestCase):
+    def setUp(self):
+        from .models import Tag
+        self.user = User.objects.create_user(username='libuser', password='testpass123')
+        self.client = Client()
+        self.client.login(username='libuser', password='testpass123')
+        self.designer = Designer.objects.create(name='Zed Designs')
+        self.tag_a = Tag.objects.create(name='alpha')
+        self.tag_b = Tag.objects.create(name='alphabet')
+        self.done = Project.objects.create(name='banana', user=self.user)
+        self.partial = Project.objects.create(name='Apple', user=self.user, designer=self.designer)
+        self.fresh = Project.objects.create(name='cherry', user=self.user)
+        Part.objects.create(project=self.done, name='d1', quantity=2, completed=2)
+        Part.objects.create(project=self.partial, name='p1', quantity=2, completed=1)
+        Part.objects.create(project=self.fresh, name='f1', quantity=2, completed=0)
+        self.done.tags.add(self.tag_a, self.tag_b)
+        self.url = reverse('projects:project_list')
+
+    def names(self, response):
+        return [p.name for p in response.context['projects']]
+
+    def test_status_filters(self):
+        for status, project in (('complete', self.done), ('in_progress', self.partial), ('not_started', self.fresh)):
+            response = self.client.get(self.url, {'status': status})
+            self.assertEqual(self.names(response), [project.name], status)
+
+    def test_only_leaf_parts_count(self):
+        project = Project.objects.create(name='Nested', user=self.user)
+        parent = Part.objects.create(project=project, name='parent', quantity=5, completed=0)
+        Part.objects.create(project=project, name='leaf', quantity=1, completed=1, parent=parent)
+        response = self.client.get(self.url, {'status': 'complete'})
+        self.assertIn('Nested', self.names(response))
+        nested = next(p for p in response.context['projects'] if p.name == 'Nested')
+        self.assertEqual(nested.parts_total, 1)
+        self.assertEqual(nested.progress_pct, 100)
+
+    def test_collection_filter(self):
+        collection = Collection.objects.create(name='Fruit')
+        collection.projects.add(self.done)
+        response = self.client.get(self.url, {'collection': collection.id})
+        self.assertEqual(self.names(response), ['banana'])
+        self.assertEqual(response.context['active_collection'], collection)
+
+    def test_missing_collection_redirects(self):
+        response = self.client.get(self.url, {'collection': 99999})
+        self.assertRedirects(response, self.url)
+
+    def test_tag_filter_and_q_no_duplicates(self):
+        response = self.client.get(self.url, {'tag': 'alpha'})
+        self.assertEqual(self.names(response), ['banana'])
+        response = self.client.get(self.url, {'q': 'alpha'})
+        self.assertEqual(self.names(response), ['banana'])
+
+    def test_q_matches_designer(self):
+        response = self.client.get(self.url, {'q': 'zed'})
+        self.assertEqual(self.names(response), ['Apple'])
+
+    def test_sort_name_case_insensitive(self):
+        response = self.client.get(self.url, {'sort': 'name'})
+        self.assertEqual(self.names(response), ['Apple', 'banana', 'cherry'])
+
+    def test_status_counts_ignore_filters(self):
+        response = self.client.get(self.url, {'tag': 'alpha'})
+        self.assertEqual(response.context['status_counts'],
+                         {'all': 3, 'not_started': 1, 'in_progress': 1, 'complete': 1})
+
+    def test_view_mode_cookie(self):
+        response = self.client.get(self.url, {'view': 'list'})
+        self.assertEqual(response.context['view_mode'], 'list')
+        self.assertEqual(response.cookies['project_view'].value, 'list')
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['view_mode'], 'list')
+
