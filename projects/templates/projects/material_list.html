@@ -3,6 +3,42 @@
 
 {% block title %}Materials - ModelFoundry{% endblock %}
 
+{% block extra_css %}
+<style>
+    .material-swatch {
+        position: relative;
+        height: 72px;
+        border-bottom: 1px solid var(--border-dark);
+        /* Base shown when no colour / unrecognised colour name: subtle "natural filament" stripes. */
+        background-color: var(--bg-grey);
+        background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, .06) 0 10px, transparent 10px 20px);
+        overflow: hidden;
+    }
+    .material-swatch-fill {
+        position: absolute;
+        inset: 0;
+        /* Soft sheen so flat colours read as material rather than a UI block; also separates black from the card. */
+        background-image: linear-gradient(160deg, rgba(255, 255, 255, .22) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, .18) 100%);
+    }
+    .material-swatch-label {
+        position: absolute;
+        left: .75rem;
+        bottom: .6rem;
+        padding: .1rem .5rem;
+        border-radius: var(--radius-pill);
+        background: rgba(0, 0, 0, .55);
+        color: #fff;
+        font-size: .72rem;
+        font-weight: 600;
+        letter-spacing: .02em;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+    }
+    .material-usage { height: 8px; border-radius: var(--radius-pill); background-color: var(--surface-overlay-strong); }
+    .material-usage .progress-bar { background-color: var(--primary-color); border-radius: var(--radius-pill); }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid premium-index-wrapper px-4 mt-4">
     
@@ -15,7 +51,7 @@
             </div>
             <div class="col-md-7 mt-3 mt-md-0 d-flex flex-column flex-md-row align-items-md-center justify-content-md-end gap-3">
                 <div class="d-flex gap-2">
-                    <a href="{% url 'projects:material_create' %}" class="btn btn-primary text-nowrap" style="border-radius: 10px;">
+                    <a href="{% url 'projects:material_create' %}" class="btn btn-primary text-nowrap">
                         <i class="fas fa-plus me-1"></i>Add Material
                     </a>
                 </div>
@@ -25,15 +61,20 @@
 
     <div class="row g-4 mt-1">
         {% for material in materials %}
-        <div class="col-md-6 col-lg-4 col-xl-3 animate-enter" style="animation-delay: {{ forloop.counter }}00ms;">
+        <div class="col-md-6 col-lg-4 col-xl-3 has-corner-action animate-enter" style="animation-delay: {{ forloop.counter }}00ms;">
             <div class="card h-100 premium-card hover-effect">
+                <a href="{% url 'projects:material_edit' material.id %}" class="btn btn-sm card-corner-action"
+                   title="Edit material" aria-label="Edit {{ material.name }}">
+                    <i class="fas fa-pen"></i>
+                </a>
+                {% comment %}Colour is free text ("#1a1a1a", "Blue", "Natural"). The fill only paints when the browser
+                understands it; otherwise the striped base shows, which reads as natural/unspecified.{% endcomment %}
+                <div class="material-swatch" {% if material.color %}title="{{ material.color }}"{% endif %}>
+                    {% if material.color %}<div class="material-swatch-fill" style="background-color: {{ material.color }};"></div>{% endif %}
+                    <span class="material-swatch-label">{% if material.color %}{{ material.color }}{% else %}No colour set{% endif %}</span>
+                </div>
                 <div class="card-body d-flex flex-column">
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <h5 class="card-title fw-bold mb-0">{{ material.name }}</h5>
-                        {% if material.color %}
-                        <div style="width: 24px; height: 24px; border-radius: 50%; background-color: {{ material.color }}; border: 2px solid rgba(255,255,255,0.2); box-shadow: 0 2px 4px rgba(0,0,0,0.2);" title="{{ material.color }}"></div>
-                        {% endif %}
-                    </div>
+                    <h5 class="card-title fw-bold mb-3">{{ material.name }}</h5>
                     
                     <div class="mb-3">
                         <span class="premium-badge">
@@ -56,10 +97,10 @@
                             </small>
                             <span class="text-muted small">{{ material.total_used|floatformat:1 }}g / {{ material.weight }}g</span>
                         </div>
-                        <div class="progress" style="height: 8px; border-radius: 4px; background-color: rgba(255,255,255,0.1);">
-                            <div class="progress-bar bg-primary" 
-                                 role="progressbar" 
-                                 style="width: {{ material.total_used|div:material.weight|mul:100 }}%; border-radius: 4px;"
+                        <div class="progress material-usage">
+                            <div class="progress-bar"
+                                 role="progressbar"
+                                 style="width: {{ material.total_used|div:material.weight|mul:100 }}%;"
                                  aria-valuenow="{{ material.total_used|div:material.weight|mul:100 }}"
                                  aria-valuemin="0"
                                  aria-valuemax="100">
@@ -70,11 +111,6 @@
                         </div>
                     </div>
                 </div>
-                <div class="card-footer bg-transparent border-top-0 pt-0 pb-3">
-                    <a href="{% url 'projects:material_edit' material.id %}" class="btn btn-outline-secondary w-100" style="border-radius: 8px;">
-                        <i class="fas fa-edit me-1"></i> Edit Material
-                    </a>
-                </div>
             </div>
         </div>
         {% empty %}
@@ -83,7 +119,7 @@
                 <i class="fas fa-cubes empty-icon"></i>
                 <h3 class="fw-bold">No materials found</h3>
                 <p class="text-muted mb-4">You haven't added any printing materials to your inventory yet.</p>
-                <a href="{% url 'projects:material_create' %}" class="btn btn-primary px-4 py-2" style="border-radius: 10px;">
+                <a href="{% url 'projects:material_create' %}" class="btn btn-primary px-4 py-2">
                     <i class="fas fa-plus me-2"></i> Add Your First Material
                 </a>
             </div>

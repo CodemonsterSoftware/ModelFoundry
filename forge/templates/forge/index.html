@@ -6,73 +6,63 @@
 
 {% block extra_css %}
 <style>
-    /* Edit Mode Animations */
-    .uninstall-btn {
-        opacity: 0;
-        transform: scale(0.8);
-        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        pointer-events: none;
-        border-radius: 50%;
-        width: 32px;
-        height: 32px;
-        padding: 0;
-        display: flex;
+    /* Whole card opens the module (stretched-link on the title); destructive action uses the shared corner button. */
+    .card-corner-action-danger:hover, .card-corner-action-danger:focus-visible {
+        background: var(--danger);
+        border-color: transparent;
+        color: #fff;
+    }
+    .module-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: var(--radius-md);
+        display: inline-flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 4px 10px rgba(220, 53, 69, 0.3);
+        background: rgba(var(--primary-color-rgb), .12);
+        border: 1px solid rgba(var(--primary-color-rgb), .3);
+        color: var(--primary-color);
+        font-size: 1.1rem;
     }
-
-    .edit-mode .uninstall-btn {
-        opacity: 1;
-        transform: scale(1);
-        pointer-events: auto;
+    .module-card .module-launch-hint {
+        color: var(--text-muted);
+        transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
     }
-
-    .edit-mode .premium-card {
-        animation: wiggle 2s linear infinite;
-        border-color: var(--border-dark);
-    }
-
-    @keyframes wiggle {
-        0%, 100% { transform: rotate(0deg); }
-        25% { transform: rotate(-1deg); }
-        75% { transform: rotate(1deg); }
-    }
-
-
-
-    .btn-launch {
-        border-radius: 10px;
-        font-weight: 500;
-        letter-spacing: 0.5px;
-        transition: all 0.2s ease;
-    }
-
-    .btn-launch:hover {
-        transform: scale(1.02);
+    .module-card:hover .module-launch-hint,
+    .module-card:focus-within .module-launch-hint { color: var(--primary-color); transform: translateX(2px); }
+    .preview-badge {
+        font-size: .65rem;
+        font-weight: 600;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        vertical-align: middle;
+        padding: .2rem .55rem;
+        border-radius: var(--radius-pill);
+        background: rgba(var(--primary-color-rgb), .12);
+        border: 1px solid rgba(var(--primary-color-rgb), .35);
+        color: var(--primary-color);
+        -webkit-text-fill-color: currentColor;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid premium-index-wrapper px-4 mt-4">
-    
+
     <!-- Hero Section -->
     <div class="premium-hero animate-enter" style="animation-delay: 0ms;">
         <div class="row align-items-center position-relative" style="z-index: 1;">
-            <div class="col-md-5">
-                <h1 class="fs-2 hero-title mb-1 fw-bold">Forge Modules</h1>
+            <div class="col-md-6">
+                <h1 class="fs-2 mb-1 fw-bold d-flex align-items-center gap-2">
+                    <span class="hero-title">Forge Modules</span>
+                    <span class="preview-badge" title="Forge is a work in progress">Preview</span>
+                </h1>
                 <p class="text-muted mb-0 small">Parametric tools, generators, and advanced mesh processors designed for your workflow.</p>
             </div>
-            <div class="col-md-7 mt-3 mt-md-0 d-flex flex-column flex-md-row align-items-md-center justify-content-md-end gap-3">
-                <div class="d-flex gap-2">
-                    <button class="btn btn-outline-secondary text-nowrap" id="editModulesBtn" onclick="toggleEditMode()" style="border-radius: 10px;">
-                        <i class="fas fa-edit me-1"></i> Edit
-                    </button>
-                    <button class="btn btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#installModuleModal" style="border-radius: 10px;">
-                        <i class="fas fa-plus-circle me-1"></i> Install Module
-                    </button>
-                </div>
+            <div class="col-md-6 mt-3 mt-md-0 d-flex justify-content-md-end">
+                <button class="btn btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#installModuleModal">
+                    <i class="fas fa-plus-circle me-1"></i> Install Module
+                </button>
             </div>
         </div>
     </div>
@@ -80,20 +70,21 @@
     <!-- Active Modules -->
     <div class="row g-4 mt-1" id="modulesGrid">
         {% for module in modules %}
-        <div class="col-md-6 col-lg-4 col-xl-3 animate-enter" style="animation-delay: {{ forloop.counter }}00ms;">
+        <div class="col-md-6 col-lg-4 col-xl-3 module-card has-corner-action animate-enter" style="animation-delay: {{ forloop.counter }}00ms;" data-module-id="{{ module.id }}">
             <div class="card h-100 premium-card hover-effect">
-                <button class="btn btn-danger position-absolute top-0 end-0 m-3 uninstall-btn" 
-                        title="Uninstall Module" 
-                        onclick="confirmUninstall('{{ module.id }}', '{{ module.name|escapejs }}')"
-                        style="z-index: 10;">
-                    <i class="fas fa-trash fa-sm"></i>
+                <button type="button" class="btn btn-sm card-corner-action card-corner-action-danger uninstall-btn"
+                        title="Uninstall module" aria-label="Uninstall {{ module.name }}"
+                        data-module-id="{{ module.id }}" data-module-name="{{ module.name }}">
+                    <i class="fas fa-trash"></i>
                 </button>
                 <div class="card-body d-flex flex-column">
-
-                    <h5 class="card-title fw-bold mb-2">{{ module.name }}</h5>
+                    <div class="module-icon mb-3"><i class="fas fa-puzzle-piece"></i></div>
+                    <h5 class="card-title fw-bold mb-2">
+                        <a href="{% url 'forge:module_view' module.id %}" class="text-decoration-none text-light stretched-link">{{ module.name }}</a>
+                    </h5>
                     <p class="card-text text-muted small flex-grow-1">{{ module.description }}</p>
-                    
-                    <div class="mt-3 mb-3">
+
+                    <div class="mt-2 mb-3">
                         <span class="premium-badge">
                             <i class="fas fa-microchip text-info"></i> {{ module.backend|title }}
                         </span>
@@ -104,138 +95,115 @@
                             <i class="fas fa-user"></i> {{ module.author|default:'Unknown' }}
                         </span>
                     </div>
-                </div>
-                <div class="card-footer bg-transparent border-top-0 pt-0 pb-3">
-                    <a href="{% url 'forge:module_view' module.id %}" class="btn btn-primary w-100 btn-launch">
-                        <i class="fas fa-play me-2"></i> Launch Tool
-                    </a>
+                    <div class="small fw-semibold module-launch-hint">
+                        Open tool <i class="fas fa-arrow-right ms-1"></i>
+                    </div>
                 </div>
             </div>
         </div>
         {% empty %}
         <div class="col-12 animate-enter" style="animation-delay: 200ms;">
-            <div class="empty-state-dashed">
-                <i class="fas fa-boxes empty-icon"></i>
-                <h3 class="fw-bold">No modules installed</h3>
-                <p class="text-muted mb-4">Enhance your workflow by installing parametric tools and mesh processors.</p>
-                <button class="btn btn-primary px-4 py-2" data-bs-toggle="modal" data-bs-target="#installModuleModal" style="border-radius: 10px;">
-                    <i class="fas fa-download me-2"></i> Install Your First Module
-                </button>
-            </div>
+            {% include 'projects/includes/_empty_state.html' with icon='fa-boxes' title='No modules installed' text='Enhance your workflow by installing parametric tools and mesh processors.' action_label='Install Your First Module' action_target='installModuleModal' %}
         </div>
         {% endfor %}
     </div>
-
-
-
 </div>
 
 <!-- Install Module Modal -->
-<div class="modal fade" id="installModuleModal" tabindex="-1">
+<div class="modal fade" id="installModuleModal" tabindex="-1" aria-labelledby="installModuleTitle" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content" style="border-radius: 16px; overflow: hidden; border: 1px solid var(--border-dark);">
-      <div class="modal-header bg-darker border-bottom border-dark">
-        <h5 class="modal-title fw-bold"><i class="fas fa-cloud-download-alt me-2 text-primary"></i> Install Module</h5>
+    <div class="modal-content mf-modal">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="installModuleTitle"><i class="fas fa-cloud-download-alt me-2 text-primary"></i> Install Module</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <div class="modal-body p-4 bg-dark">
-        <form id="installForm">
-          <div class="mb-3">
-            <label for="manifestUrl" class="form-label fw-medium">Manifest URL</label>
-            <input type="url" class="form-control form-control-lg" id="manifestUrl" placeholder="https://raw.githubusercontent.com/.../manifest.json" required style="border-radius: 10px;">
-            <div class="form-text mt-2"><i class="fas fa-info-circle me-1"></i> Paste the raw URL to the manifest.json file from a compatible GitHub repository.</div>
-          </div>
+      <div class="modal-body p-4">
+        <form id="installForm" novalidate>
+          <label for="manifestUrl" class="form-label fw-medium">Manifest URL</label>
+          <input type="url" class="form-control form-control-lg" id="manifestUrl" placeholder="https://raw.githubusercontent.com/.../manifest.json" required>
+          <div class="invalid-feedback">Enter the full URL of a manifest.json file.</div>
+          <div class="form-text mt-2"><i class="fas fa-info-circle me-1"></i> Paste the raw URL to the manifest.json file from a compatible GitHub repository.</div>
         </form>
       </div>
-      <div class="modal-footer bg-darker border-top border-dark">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="border-radius: 8px;">Cancel</button>
-        <button type="button" class="btn btn-primary" id="installBtn" onclick="submitInstall()" style="border-radius: 8px; min-width: 120px;">
-            Install Module
-        </button>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="installBtn" style="min-width: 120px;">Install Module</button>
       </div>
     </div>
   </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-function submitInstall() {
+(function () {
     const urlInput = document.getElementById('manifestUrl');
-    const url = urlInput.value;
-    const btn = document.getElementById('installBtn');
-    
-    if (!url) return;
-    
-    // Disable inputs and show loading state
-    urlInput.disabled = true;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Installing...';
-    
-    fetch('{% url "forge:install_module" %}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': '{{ csrf_token }}'
-        },
-        body: 'manifest_url=' + encodeURIComponent(url)
-    })
-    .then(r => r.json())
-    .then(data => {
-        if(data.success) {
-            window.location.reload();
-        } else {
-            alert('Failed to install module: ' + data.error);
-            // Restore UI state
-            urlInput.disabled = false;
-            btn.disabled = false;
-            btn.innerHTML = 'Install Module';
-        }
-    })
-    .catch(err => {
-        alert('Network error occurred during installation.');
-        urlInput.disabled = false;
-        btn.disabled = false;
-        btn.innerHTML = 'Install Module';
-    });
-}
+    const installBtn = document.getElementById('installBtn');
+    const CSRF = '{{ csrf_token }}';
 
-function toggleEditMode() {
-    const grid = document.getElementById('modulesGrid');
-    const editBtn = document.getElementById('editModulesBtn');
-    
-    grid.classList.toggle('edit-mode');
-    editBtn.classList.toggle('active');
-    
-    if (grid.classList.contains('edit-mode')) {
-        editBtn.innerHTML = '<i class="fas fa-check me-1"></i> Done';
-        editBtn.classList.replace('btn-outline-secondary', 'btn-success');
-    } else {
-        editBtn.innerHTML = '<i class="fas fa-edit me-1"></i> Edit';
-        editBtn.classList.replace('btn-success', 'btn-outline-secondary');
+    function setInstalling(busy) {
+        urlInput.disabled = busy;
+        installBtn.disabled = busy;
+        installBtn.innerHTML = busy
+            ? '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Installing...'
+            : 'Install Module';
     }
-}
 
-function confirmUninstall(moduleId, moduleName) {
-    if (confirm(`Are you sure you want to uninstall the module "${moduleName}"?\nThis action will delete its files and cannot be undone.`)) {
-        fetch(`/forge/uninstall/${moduleId}/`, {
+    function submitInstall() {
+        const url = urlInput.value.trim();
+        if (!url || !urlInput.checkValidity()) {
+            urlInput.classList.add('is-invalid');
+            urlInput.focus();
+            return;
+        }
+        setInstalling(true);
+        fetch('{% url "forge:install_module" %}', {
             method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}'
-            }
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF },
+            body: 'manifest_url=' + encodeURIComponent(url)
         })
         .then(r => r.json())
         .then(data => {
-            if(data.success) {
-                // Add a cool fade out animation before reloading
-                const card = document.querySelector(`button[onclick*="${moduleId}"]`).closest('.col-md-6');
-                card.style.transition = 'all 0.4s ease';
-                card.style.transform = 'scale(0.8)';
-                card.style.opacity = '0';
-                setTimeout(() => window.location.reload(), 400);
+            if (data.success) {
+                MF.reloadWithToast('Module installed');
             } else {
-                alert('Failed to uninstall module: ' + data.error);
+                MF.toast('Failed to install module: ' + (data.error || 'Unknown error'), 'error');
+                setInstalling(false);
             }
+        })
+        .catch(() => {
+            MF.toast('Network error occurred during installation.', 'error');
+            setInstalling(false);
         });
     }
-}
+
+    installBtn.addEventListener('click', submitInstall);
+    document.getElementById('installForm').addEventListener('submit', e => { e.preventDefault(); submitInstall(); });
+    urlInput.addEventListener('input', () => urlInput.classList.remove('is-invalid'));
+
+    document.getElementById('modulesGrid').addEventListener('click', e => {
+        const btn = e.target.closest('.uninstall-btn');
+        if (!btn) return;
+        const { moduleId, moduleName } = btn.dataset;
+        MF.confirm({
+            title: 'Uninstall module?',
+            message: `Uninstall "${moduleName}"?\nThis deletes its files and cannot be undone.`,
+            confirmLabel: 'Uninstall',
+            danger: true
+        }).then(ok => {
+            if (!ok) return;
+            fetch(`/forge/uninstall/${encodeURIComponent(moduleId)}/`, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success) {
+                        MF.reloadWithToast(`Uninstalled "${moduleName}"`);
+                    } else {
+                        MF.toast('Failed to uninstall module: ' + (data.error || 'Unknown error'), 'error');
+                    }
+                })
+                .catch(() => MF.toast('Network error while uninstalling.', 'error'));
+        });
+    });
+})();
 </script>
 {% endblock %}

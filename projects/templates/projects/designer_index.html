@@ -72,6 +72,13 @@
         text-align: center;
         padding: 2rem;
     }
+    /* Whole card links to the designer (stretched-link on the name); inner links sit above it. */
+    .designer-card .designer-project-link {
+        position: relative;
+        z-index: 2;
+        transition: color var(--dur-fast) var(--ease-out);
+    }
+    .designer-card .designer-project-link:hover { color: var(--text-light) !important; }
 </style>
 {% endblock %}
 
@@ -92,7 +99,7 @@
                     <i class="fas fa-times-circle clear-icon" id="clearSearch"></i>
                 </div>
                 <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#newDesignerModal" style="border-radius: 10px;">
+                    <button type="button" class="btn btn-primary text-nowrap" data-bs-toggle="modal" data-bs-target="#newDesignerModal">
                         <i class="fas fa-plus me-1"></i>New Designer
                     </button>
                 </div>
@@ -103,11 +110,15 @@
     <!-- Active Designers -->
     <div class="row g-4 mt-1" id="designersContainer">
         {% for data in designer_data %}
-        <div class="col-md-6 col-lg-4 col-xl-3 designer-card animate-enter" 
+        <div class="col-md-6 col-lg-4 col-xl-3 designer-card has-corner-action animate-enter" 
              style="animation-delay: {{ forloop.counter|add:'1' }}00ms;"
              data-name="{{ data.designer.name|lower }}" 
              data-projects="{% for project in data.projects %}{{ project.name|lower }} {% endfor %}">
-            <div class="card h-100 premium-card hover-effect">
+            <div class="card h-100 premium-card hover-effect position-relative">
+                <a href="{% url 'projects:designer_update' data.designer.id %}" class="btn btn-sm card-corner-action"
+                   title="Edit designer" aria-label="Edit {{ data.designer.name }}">
+                    <i class="fas fa-pen"></i>
+                </a>
                 <div class="designer-logo-container border-bottom border-dark">
                     {% if data.designer.logo %}
                     <img src="{{ data.designer.logo_thumbnail.url }}" alt="{{ data.designer.name }} logo">
@@ -119,7 +130,7 @@
                 </div>
                 <div class="card-body d-flex flex-column">
                     <h5 class="card-title fw-bold mb-3">
-                        <a href="{% url 'projects:designer_detail' data.designer.id %}" class="text-decoration-none text-light">
+                        <a href="{% url 'projects:designer_detail' data.designer.id %}" class="text-decoration-none text-light stretched-link">
                             {{ data.designer.name }}
                         </a>
                     </h5>
@@ -138,7 +149,7 @@
                         <ul class="list-unstyled mb-0 small">
                             {% for project in data.projects|slice:":3" %}
                             <li class="mb-2">
-                                <a href="{% url 'projects:project_detail' project.id %}" class="text-decoration-none text-muted" style="transition: color 0.2s;">
+                                <a href="{% url 'projects:project_detail' project.id %}" class="text-decoration-none text-muted designer-project-link">
                                     <i class="fas fa-folder-open me-2 text-secondary"></i>{{ project.name }}
                                 </a>
                             </li>
@@ -151,16 +162,6 @@
                         </ul>
                     </div>
                 </div>
-                <div class="card-footer bg-transparent border-top-0 pt-0 pb-3">
-                    <div class="btn-group w-100">
-                        <a href="{% url 'projects:designer_detail' data.designer.id %}" class="btn btn-primary" style="border-radius: 8px 0 0 8px;">
-                            <i class="fas fa-eye me-1"></i>View
-                        </a>
-                        <a href="{% url 'projects:designer_update' data.designer.id %}" class="btn btn-outline-secondary" style="border-radius: 0 8px 8px 0;">
-                            <i class="fas fa-edit me-1"></i>Edit
-                        </a>
-                    </div>
-                </div>
             </div>
         </div>
         {% empty %}
@@ -169,7 +170,7 @@
                 <i class="fas fa-users empty-icon"></i>
                 <h3 class="fw-bold">No designers yet</h3>
                 <p class="text-muted mb-4">Keep track of artists by adding your first designer to the library.</p>
-                <button class="btn btn-primary px-4 py-2" data-bs-toggle="modal" data-bs-target="#newDesignerModal" style="border-radius: 10px;">
+                <button class="btn btn-primary px-4 py-2" data-bs-toggle="modal" data-bs-target="#newDesignerModal">
                     <i class="fas fa-plus me-2"></i> Add Designer
                 </button>
             </div>
@@ -183,7 +184,7 @@
             <i class="fas fa-search empty-icon"></i>
             <h3 class="fw-bold">No matches found</h3>
             <p class="text-muted mb-4">We couldn't find any designers matching your search query.</p>
-            <button class="btn btn-outline-secondary px-4 py-2" id="resetSearch" style="border-radius: 10px;">
+            <button class="btn btn-glass px-4 py-2" id="resetSearch">
                 <i class="fas fa-undo me-2"></i> Clear Search
             </button>
         </div>
@@ -227,7 +228,7 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-glass" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">Add Designer</button>
                 </div>
             </form>
