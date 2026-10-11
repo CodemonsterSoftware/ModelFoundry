@@ -40,22 +40,22 @@
                                 <!-- Links -->
                                 <div class="d-flex flex-wrap gap-2">
                                     {% if designer.mmf_url %}
-                                    <a href="{{ designer.mmf_url }}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-sm hover-lift" title="MyMiniFactory">
+                                    <a href="{{ designer.mmf_url }}" target="_blank" class="btn btn-sm btn-glass px-3 shadow-sm hover-lift" title="MyMiniFactory">
                                         <i class="fas fa-store me-1"></i> MMF
                                     </a>
                                     {% endif %}
                                     {% if designer.patreon_url %}
-                                    <a href="{{ designer.patreon_url }}" target="_blank" class="btn btn-sm btn-outline-danger rounded-pill px-3 shadow-sm hover-lift" title="Patreon">
+                                    <a href="{{ designer.patreon_url }}" target="_blank" class="btn btn-sm btn-glass px-3 shadow-sm hover-lift" title="Patreon">
                                         <i class="fab fa-patreon me-1"></i> Patreon
                                     </a>
                                     {% endif %}
                                     {% if designer.cults3d_url %}
-                                    <a href="{{ designer.cults3d_url }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm hover-lift" title="Cults3D">
+                                    <a href="{{ designer.cults3d_url }}" target="_blank" class="btn btn-sm btn-glass px-3 shadow-sm hover-lift" title="Cults3D">
                                         <i class="fas fa-cube me-1"></i> Cults3D
                                     </a>
                                     {% endif %}
                                     {% if designer.website_url %}
-                                    <a href="{{ designer.website_url }}" target="_blank" class="btn btn-sm btn-outline-light rounded-pill px-3 shadow-sm hover-lift" title="Website">
+                                    <a href="{{ designer.website_url }}" target="_blank" class="btn btn-sm btn-glass px-3 shadow-sm hover-lift" title="Website">
                                         <i class="fas fa-globe me-1"></i> Website
                                     </a>
                                     {% endif %}
@@ -74,8 +74,11 @@
             <h3 class="mb-0 fw-bold text-light"><i class="fas fa-folder-open me-2 text-primary"></i>Projects by {{ designer.name }}</h3>
             <p class="text-muted mb-0 mt-1">Browse all designs and active prints from this creator.</p>
         </div>
-        <div class="col-auto">
-            <a href="{% url 'projects:designer_index' %}" class="btn btn-outline-secondary rounded-pill px-4 shadow-sm hover-lift">
+        <div class="col-auto d-flex gap-2">
+            <a href="{% url 'projects:designer_update' designer.id %}" class="btn btn-glass px-4 shadow-sm hover-lift">
+                <i class="fas fa-edit me-2"></i>Edit / Delete
+            </a>
+            <a href="{% url 'projects:designer_index' %}" class="btn btn-glass px-4 shadow-sm hover-lift">
                 <i class="fas fa-arrow-left me-2"></i>Back to Designers
             </a>
         </div>

@@ -2506,3 +2506,28 @@ class ProjectLibraryTests(TestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.context['view_mode'], 'list')
 
+
+class DesignerDeleteTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='designeruser', password='pw')
+        self.client.login(username='designeruser', password='pw')
+        self.designer = Designer.objects.create(name='Deletable')
+
+    def test_delete_unused_designer(self):
+        response = self.client.post(reverse('projects:designer_delete', args=[self.designer.id]))
+        self.assertRedirects(response, reverse('projects:designer_index'))
+        self.assertFalse(Designer.objects.filter(id=self.designer.id).exists())
+
+    def test_delete_refused_while_projects_reference_designer(self):
+        project = Project.objects.create(name='Attributed', user=self.user, designer=self.designer)
+        response = self.client.post(reverse('projects:designer_delete', args=[self.designer.id]), follow=True)
+        self.assertRedirects(response, reverse('projects:designer_detail', args=[self.designer.id]))
+        self.assertTrue(Designer.objects.filter(id=self.designer.id).exists())
+        project.refresh_from_db()
+        self.assertEqual(project.designer, self.designer)
+        self.assertIn('still assigned to 1 project.', str(list(response.context['messages'])[0]))
+
+    def test_delete_requires_post(self):
+        response = self.client.get(reverse('projects:designer_delete', args=[self.designer.id]))
+        self.assertEqual(response.status_code, 405)
+        self.assertTrue(Designer.objects.filter(id=self.designer.id).exists())

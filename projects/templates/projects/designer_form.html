@@ -82,7 +82,7 @@
                         </div>
 
                         <div class="d-flex justify-content-between">
-                            <a href="{% url 'projects:designer_detail' designer.id %}" class="btn btn-dark">
+                            <a href="{% url 'projects:designer_detail' designer.id %}" class="btn btn-glass">
                                 <i class="fas fa-arrow-left me-2"></i>Back to Designer
                             </a>
                             <button type="submit" class="btn btn-primary">
@@ -90,6 +90,27 @@
                             </button>
                         </div>
                     </form>
+
+                    <hr class="border-secondary my-4">
+                    {% with project_count=designer.projects.count %}
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                        <div>
+                            <div class="fw-semibold">Delete designer</div>
+                            {% if project_count %}
+                            <small class="text-muted">Used by {{ project_count }} project{{ project_count|pluralize }}. Reassign or remove the designer from {{ project_count|pluralize:"it,them" }} before deleting.</small>
+                            {% else %}
+                            <small class="text-muted">Not used by any project. This cannot be undone.</small>
+                            {% endif %}
+                        </div>
+                        <form method="post" action="{% url 'projects:designer_delete' designer.id %}"
+                              data-confirm='Delete designer "{{ designer.name }}"? This cannot be undone.'>
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-danger" {% if project_count %}disabled aria-disabled="true"{% endif %}>
+                                <i class="fas fa-trash me-2"></i>Delete Designer
+                            </button>
+                        </form>
+                    </div>
+                    {% endwith %}
                 </div>
             </div>
         </div>
@@ -111,30 +132,6 @@
     }
     
     .form-label {
-        color: var(--text-light);
-    }
-    
-    .btn-dark {
-        background-color: var(--bg-dark);
-        border-color: var(--border-color);
-        color: var(--text-light);
-    }
-    
-    .btn-dark:hover {
-        background-color: var(--border-color);
-        border-color: var(--border-color);
-        color: var(--text-light);
-    }
-    
-    .btn-primary {
-        background-color: var(--primary-color);
-        border-color: var(--primary-color);
-        color: var(--text-light);
-    }
-    
-    .btn-primary:hover {
-        background-color: var(--primary-color-dark);
-        border-color: var(--primary-color-dark);
         color: var(--text-light);
     }
 </style>

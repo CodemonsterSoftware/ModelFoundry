@@ -1086,6 +1086,29 @@ def designer_update(request, designer_id):
     })
 
 @login_required
+@require_POST
+def designer_delete(request, designer_id):
+    """Delete a designer. Refused while any project still references them:
+    the FK is SET_NULL, so deleting would silently strip attribution."""
+    designer = get_object_or_404(Designer, id=designer_id)
+    project_count = designer.projects.count()
+    if project_count:
+        noun = 'project' if project_count == 1 else 'projects'
+        messages.error(
+            request,
+            f'Cannot delete "{designer.name}": still assigned to {project_count} {noun}. '
+            f'Reassign or remove the designer from {"it" if project_count == 1 else "them"} first.'
+        )
+        return redirect('projects:designer_detail', designer_id=designer.id)
+
+    name = designer.name
+    if designer.logo:
+        designer.logo.delete(save=False)
+    designer.delete()
+    messages.success(request, f'Designer "{name}" deleted.')
+    return redirect('projects:designer_index')
+
+@login_required
 def material_list(request):
     """View for listing all materials."""
     materials = Material.objects.filter(is_active=True).order_by('name')

@@ -47,6 +47,7 @@ urlpatterns = [
     path('designers/', login_required(views.designer_index), name='designer_index'),
     path('designer/<int:designer_id>/', login_required(views.designer_detail), name='designer_detail'),
     path('designer/<int:designer_id>/update/', login_required(views.designer_update), name='designer_update'),
+    path('designer/<int:designer_id>/delete/', login_required(views.designer_delete), name='designer_delete'),
     path('materials/', views.material_list, name='material_list'),
     path('materials/add/', views.material_create, name='material_create'),
     path('materials/<int:material_id>/edit/', views.material_edit, name='material_edit'),
